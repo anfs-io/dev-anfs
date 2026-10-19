@@ -46,3 +46,47 @@ hookspath() { git -C "$SOURCES/$1" config --local --get core.hooksPath || true; 
   run hooks --help
   [[ "$output" == "Usage: anfs hooks <command>"* ]]
 }
+
+# The dev package installed from a user.list source: its stowed hook links into that source
+devsource() {
+  local src
+  src=$(mksource devsrc)
+  mkdir -p "$src/packages/dev/home/.config/git/ppm-hooks"
+  echo '#!/bin/sh' > "$src/packages/dev/home/.config/git/ppm-hooks/pre-commit"
+  if [[ "${1:-}" == folded ]]; then
+    rmdir "$HOOKDIR"
+    ln -s "../../.local/share/anfs/sources/devsrc/packages/dev/home/.config/git/ppm-hooks" "$HOOKDIR"
+  else
+    ln -s "$src/packages/dev/home/.config/git/ppm-hooks/pre-commit" "$HOOKDIR/pre-commit"
+  fi
+}
+
+@test "install with no names: the dev package's own source too, not the rest of user.list" {
+  devsource
+  run hooks install
+  [ "$status" -eq 0 ]
+  [ "$(hookspath core)" = "$HOOKDIR" ]
+  [ "$(hookspath devsrc)" = "$HOOKDIR" ]
+  [ -z "$(hookspath mine)" ]
+  run hooks status
+  [[ "$output" == *"devsrc"*"installed"* && "$output" != *"mine"* ]]
+  run hooks install --all
+  [ "$(hookspath mine)" = "$HOOKDIR" ]
+}
+
+@test "the dev package's source is found when stow folded the hook directory into a link" {
+  devsource folded
+  run hooks install
+  [ "$status" -eq 0 ]
+  [ "$(hookspath devsrc)" = "$HOOKDIR" ]
+  [ -z "$(hookspath mine)" ]
+}
+
+@test "hooks stowed from outside the sources wire only system.list" {
+  mkdir -p "$T/elsewhere/packages/dev/home/.config/git/ppm-hooks"
+  echo '#!/bin/sh' > "$T/elsewhere/packages/dev/home/.config/git/ppm-hooks/pre-commit"
+  ln -s "$T/elsewhere/packages/dev/home/.config/git/ppm-hooks/pre-commit" "$HOOKDIR/pre-commit"
+  run hooks install
+  [ "$(hookspath core)" = "$HOOKDIR" ]
+  [ -z "$(hookspath mine)" ]
+}

@@ -11,6 +11,7 @@
 # everywhere at once, and a higher-priority layer can override a single hook file through stow.
 set -euo pipefail
 
+HOOKS_SELF="${BASH_SOURCE[0]}"
 ANFS_LIB="$HOME/.local/lib/anfs"
 if [[ ! -f "$ANFS_LIB/bash.sh" || ! -f "$ANFS_LIB/cli.sh" ]]; then
   echo "anfs hooks: $ANFS_LIB is missing or out of date; install core/anfs again" >&2
@@ -29,7 +30,7 @@ source "$ANFS_LIB/cli.sh"
 CLI_TOOL="anfs hooks"
 PPM_HOOKS_DIR="$XDG_CONFIG_HOME/git/ppm-hooks"
 
-cli_cmd status "Which repos are wired up. Without names: the repos in system.list" \
+cli_cmd status "Which repos are wired up. Without names: system.list and this package's source" \
   --opt "--all: Your user.list repos too" --arg "[source...]"
 cli_cmd install "Point each repo's core.hooksPath at the hooks" \
   --opt "--all: Your user.list repos too" --arg "[source...]"
@@ -66,7 +67,36 @@ _hooks_aliases_in() {
   done < "$file"
 }
 
-# The repos to act on: explicit names, else system.list (plus user.list with --all)
+# A file's real path, every symlink on the way followed (no realpath on older macOS)
+_hooks_real() {
+  local p="$1" l
+  while [[ -L "$p" ]]; do
+    l=$(readlink "$p")
+    if [[ "$l" == /* ]]; then p="$l"; else p="$(dirname "$p")/$l"; fi
+  done
+  (cd -P "$(dirname "$p")" 2>/dev/null && printf '%s/%s\n' "$(pwd)" "${p##*/}")
+}
+
+# The alias of the source this package was installed from, found from where the stowed hooks (or
+# this script) really live; nothing when that is not one of the sources (a job's worktree, say)
+_hooks_own_source() {
+  local real root d
+  for real in "$(_hooks_real "$PPM_HOOKS_DIR/pre-commit")" "$(_hooks_real "$HOOKS_SELF")"; do
+    [[ -n "$real" ]] || continue
+    case "$real" in
+      */packages/*/home/.config/git/ppm-hooks/pre-commit) root="${real%/packages/*/home/.config/git/ppm-hooks/pre-commit}" ;;
+      */packages/*/home/.local/bin/anfs-hooks) root="${real%/packages/*/home/.local/bin/anfs-hooks}" ;;
+      *) continue ;;
+    esac
+    for d in "$ANFS_SOURCES_HOME"/*/; do
+      [[ "$(cd -P "$d" 2>/dev/null && pwd)" == "$root" ]] && { basename "$d"; return 0; }
+    done
+  done
+  return 0
+}
+
+# The repos to act on: explicit names, else system.list and the source this package came from
+# (plus user.list with --all)
 _hooks_target_repos() {
   local all="$1"; shift
   if [[ $# -gt 0 ]]; then
@@ -75,6 +105,7 @@ _hooks_target_repos() {
   fi
   {
     _hooks_aliases_in "$ANFS_SYSTEM_LIST"
+    _hooks_own_source
     $all && _hooks_aliases_in "$ANFS_USER_LIST"
   } | awk '!seen[$0]++'
 }

@@ -78,7 +78,7 @@ and `run` derive from it, and core's test helpers and e2e scripts use these when
 | `PMM_SSH_PORT_BASE` | `2222 + 100 × n` | two jobs' machines never want the same port |
 | `TMPDIR` | `/tmp/anfs-work-<uid>-<n>` | temp homes are found and cleaned per job |
 
-- The round trips take a source the job does not hold (of `core` and `stack`) from the installed
+- The round trips take a source the job does not hold (of `core`, `stack` and `anfs-dev`) from the installed
   sources, by alias.
 - The ISO store (`~/.cache/anfs/isos`) is shared and read-only to every test: an ISO downloads
   once. The bats helpers use a temp one; only an e2e reads the real store.
@@ -108,7 +108,7 @@ the differences between them are the whole point:
 cheapest way to see what a *second* user experiences — the non-owner Homebrew path in particular —
 but it shares your machine, so it proves nothing about a bare one.
 
-**`ppm container`** is the workhorse. The boxes are ordinary pcm services, the anfs repo's
+**`ppm container`** is the workhorse. The boxes are ordinary pcm services, this source's
 `containers/anfs-test-debian` and `anfs-test-fedora`. Each has two test users (`owner`, who has
 sudo with a password, and `other`, who has none) and every source repo mounted read-only at
 `/src/<alias>` (pcm's `anfs-sources` mount set), so the box tests your **working tree** — edits

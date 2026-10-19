@@ -8,9 +8,10 @@ _dev_hooks() {
 
 # Wire the git hooks into the package repos. Hooks are not carried by git clone, so this runs on
 # install rather than being part of a repo's contents; re-run `anfs hooks install` after
-# `anfs src add`. user.list repos are opt-in (`anfs hooks install --all`).
+# `anfs src add`. Besides system.list, the source this package came from is wired; the rest of
+# user.list is opt-in (`anfs hooks install --all`).
 post_install() {
-  echo "Wiring git hooks into the system.list repos:"
+  echo "Wiring git hooks into the system.list repos and this package's source:"
   _dev_hooks install || true
 }
 

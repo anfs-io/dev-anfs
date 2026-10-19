@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# core/dev — adds `ppm container`: disposable Linux boxes for testing anfs installs
+# anfs-dev/dev — adds `ppm container`: disposable Linux boxes for testing anfs installs
 # Stowed to ~/.local/lib/ppm/ and sourced by ppm: the `ppm container` commands are declared below
 #
-# The boxes are pcm services, the anfs repo's containers/anfs-test-<distro> definitions: pcm runs
+# The boxes are pcm services, the containers/anfs-test-<distro> definitions (anfs-dev's, by bare name): pcm runs
 # them (privileged, declared, so podman works inside), mounts every anfs source read-only at
 # /src/<alias> (the anfs-sources mount set), and keeps snapshots of them. This command only adds
 # what is about testing anfs: linking the mounted sources into a test user's anfs and running
@@ -10,7 +10,7 @@
 # convenience. They complement VMs rather than replace them: no systemd services, login sessions
 # (chsh) or kernel features (NFS, KVM).
 #
-# The end-to-end round trip (packages/anfs/tests/roundtrip) builds the same boxes without pcm, so
+# The end-to-end round trip (packages/dev/tests/roundtrip) builds the same boxes without pcm, so
 # testing pcm never depends on pcm.
 
 PPM_CONTAINER_INSTALLER_URL=https://raw.githubusercontent.com/anfs-io/system/refs/heads/main/install.sh

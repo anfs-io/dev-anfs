@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# core/dev — adds `ppm move`: relocate a package to another source repo
+# anfs-dev/dev — adds `ppm move`: relocate a package to another source repo
 # Stowed to ~/.local/lib/ppm/ and sourced by ppm, so cmd_move() is the command `ppm move`
 #
 # Moving a package is four things, not one: unstow it from the old location, move the directory,

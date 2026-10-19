@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# core/dev — adds `ppm vm`: disposable macOS VMs for testing anfs installs on Apple silicon
+# anfs-dev/dev — adds `ppm vm`: disposable macOS VMs for testing anfs installs on Apple silicon
 # Stowed to ~/.local/lib/ppm/ and sourced by ppm: the `ppm vm` commands are declared below
 #
 # The sibling of `ppm container`, with the same subcommands and the same contract: two test users
@@ -8,8 +8,8 @@
 # everything a container cannot reach: login shells (rc files and chsh are real), launchd, and
 # macOS itself, where the most fragile paths live (the Xcode CLT, the Homebrew prefix, casks).
 #
-# The boxes are pmm machines, as the containers are pcm services: target <t> is the anfs repo's
-# machines/anfs-test-<t>, from the image of the same name (tart backend). Every command but
+# The boxes are pmm machines, as the containers are pcm services: target <t> is the machine
+# anfs-test-<t> (anfs-dev's, by bare name), from the image of the same name (tart backend). Every command but
 # install is pmm's own. This command only adds what is about testing
 # anfs: linking the mounted sources into a test user's anfs and running install.sh from them. A macOS guest gets no nested virtualization, so pcm's podman
 # machine cannot start in it.
