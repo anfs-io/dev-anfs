@@ -21,11 +21,25 @@ Moved from core (core 1066363) in plan `dev-source/01-move`.
 
 ## Git Hooks
 
-`anfs-dev/dev` ships a `pre-commit` hook that bumps a package's patch version when a commit touches
-it, and creates `package.yml` for a package that has none. It then refuses the commit if any
-directory under `packages/` would be left without a `package.yml` (a `package.yml` deleted on its
-own) or with one that is not a YAML map with `categories`, if present, a list (checked when `yq`
-is installed). The files live in the package at
+`anfs-dev/dev` ships a `pre-commit` hook that bumps a resource's patch version when a commit
+touches it, and creates the manifest of a resource that has none. A resource is a directory with
+a manifest named for its kind:
+
+| Directory | Manifest |
+|-----------|----------|
+| `packages/<p>/` | `package.yml` |
+| `containers/<c>/` | `container.yml` |
+| `machines/<m>/` | `machine.yml` |
+| `machines/images/<i>/` | `image.yml` |
+| `machines/networks/<n>/` | `network.yml` |
+| `stacks/<s>/` | `stack.yml` |
+
+It then refuses the commit if any resource directory would be left without its manifest (one
+deleted on its own, or a resource that predates the hook), or with one that is not a YAML map
+(`package.yml`: with `categories`, if present, a list; checked when `yq` is installed). A
+manifest without a `version:` gets `0.1.0`. Files in no resource (`containers/README.md`,
+`machines/profiles.yml`) are left alone. The table is `META_KINDS` in `lib/package-meta.sh`: a
+new kind is one line. The files live in the package at
 `packages/dev/home/.config/git/ppm-hooks/` and are stowed to `~/.config/git/ppm-hooks/`.
 
 `anfs hooks` (the package's `anfs-hooks`) wires them up, because **git does not carry hooks
@@ -63,7 +77,7 @@ The bump rule is **once per unpushed series**: the hook compares the working ver
 version at the push base (`@{upstream}`, else `origin/HEAD`/`main`/`master`) and only bumps when
 they match. So a run of commits before one push bumps once, `git commit --amend` doesn't bump
 again, and a version you set by hand is respected. A repo with nothing pushed yet has had zero
-pushes, so it gets zero bumps: a new package settles at `0.1.0` and stays until its first push.
+pushes, so it gets zero bumps: a new resource settles at `0.1.0` and stays until its first push.
 A version that isn't `N.N.N` is left alone rather than mangled.
 
 `lib/package-meta.sh` next to the hook is deliberately standalone — it uses `sed` rather than
