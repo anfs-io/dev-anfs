@@ -3,7 +3,7 @@
 #
 #   install.sh                       on a vanilla macOS: Xcode CLT, Homebrew, then the toolkit
 #   ppm install stack/pi             an agent, so psm has somewhere to put skills
-#   anfs install acme                the fixture org source, tool by tool (acme/acme-mac adds a cask)
+#   anfs src install acme            the fixture org source, tool by tool (acme/acme-mac adds a cask)
 #   checks                           what Linux can't show: CLT, /opt/homebrew, casks, the bash floor
 #   anfs implode [--all]             and $HOME compared with what it was before install.sh
 #
@@ -13,7 +13,7 @@
 #          implode --all must refuse until it is changed back (the login-shell guard)
 #
 # pcm cannot run here: a macOS guest has no nested virtualization, so the podman machine pcm would
-# create cannot start. Its containers are installed by `anfs install acme` and fail; the checks
+# create cannot start. Its containers are installed by `anfs src install acme` and fail; the checks
 # only require that the failure is reported and that implode leaves nothing behind.
 #
 # The VM is recreated from the image's build for every run, with a frozen copy of the source repos
@@ -28,7 +28,7 @@ set -euo pipefail
 
 all=false
 [[ "${1:-}" == "--all" ]] && all=true
-command -v pmm >/dev/null || { echo "needs pmm (ppm install core/anfs)" >&2; exit 1; }
+command -v pmm >/dev/null || { echo "needs pmm (ppm install core/pmm)" >&2; exit 1; }
 IMG=anfs-test-macos
 
 # $HOME paths a round trip may leave behind or change: macOS's own per-user state, and what
@@ -99,9 +99,9 @@ box '
   bash /src/core/install.sh
 ' | tail -n 5
 
-echo "== ppm install stack/pi, then anfs install acme"
+echo "== ppm install stack/pi, then anfs src install acme"
 box 'ppm install stack/pi' >/dev/null || echo "!! ppm install stack/pi failed"
-acme_out=$(box 'anfs install -y acme' 2>&1) || true
+acme_out=$(box 'anfs src install -y acme' 2>&1) || true
 
 status=0
 check() {
@@ -120,8 +120,8 @@ check "ppm: acme/hello stowed and runs"               'acme-hello | grep -q "hel
 check "ppm: acme/acme-infra pulled in stack/fnox"   'ppm list --installed --json | yq -p json -e ".[] | select(.package == \"stack/fnox\")"'
 check "ppm: acme/acme-mac installed its cask"         'ppm list --installed --json | yq -p json -e ".[] | select(.package == \"acme/acme-mac\")" && [ -d /Applications/Rectangle.app ]'
 check "cli: help and completion from the declarations" 'anfs help | grep -q "implode \[-y\]" && ppm __complete "" | grep -q "^implode" && ppm completion zsh | grep -q "ppm __complete"'
-check "pmm: the image acme/hello validates with its from: parent" 'pmm image validate acme/hello debian-13'
-check "pmm: the machine acme/hello validates against its image" 'pmm validate acme/hello'
+check "system: anfs list shows core/system installed"  'anfs list | grep -Eq "^core/system[[:space:]]+installed"'
+check "system: no pmm, qemu or pvm by default"          '! command -v pmm && ! command -v pvm && ! compgen -c qemu-system- | grep -q .'
 check "psm: acme-hello installed for pi"              'psm ls --json | yq -p json -e ".[] | select(.status == \"ok\" and .skill == \"acme/acme-hello\")"'
 check "wsm: org installed before tech"                'wsm path acme/main/org >/dev/null && wsm path acme/main/tech >/dev/null'
 if grep -q "pcm install" <<< "$acme_out" && box 'pcm list' >/dev/null 2>&1; then
