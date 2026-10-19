@@ -1,0 +1,3 @@
+version: 0.1.0
+description: A fresh Fedora box for testing anfs installs
+upstream: docker.io/library/fedora:latest
