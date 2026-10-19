@@ -1,14 +1,87 @@
-# dev — working on ppm
+# dev — working on the toolkit
 
-Install this package when you are changing ppm itself rather than using it. It adds commands for
-testing installs on machines you can throw away, and wires up the git hooks that version packages.
+Install this package when you are changing the toolkit itself rather than using it. It adds `anfs
+work` (jobs in their own git worktrees), commands for testing installs on machines you can throw
+away, and wires up the git hooks that version packages.
 
 ```bash
-ppm install ppm/dev
+anfs src add git@github.com:anfs-io/dev-anfs anfs-dev
+ppm install anfs-dev/dev
 ```
 
-Run `ppm container`, `ppm user` or `ppm hooks` for their usage. What follows is what each one is
-for and when to reach for it.
+`anfs work` and `anfs hooks` are executables (`~/.local/bin/anfs-work`, `anfs-hooks`) that anfs
+runs for a command it does not declare itself. `ppm container`, `ppm vm`, `ppm user` and `ppm
+move` are still ppm commands, stowed into `~/.local/lib/ppm/`. Run any of them for its usage.
+What follows is what each one is for and when to reach for it.
+
+## Working on the toolkit
+
+Work on the toolkit is done in jobs, never in the checkouts under `~/.local/share/anfs/sources/`:
+those are the live install (the tools on PATH are linked from them) and stay on main. A job is a
+directory holding a git worktree of every repo the work touches, all on one branch named for the
+job:
+
+```
+~/work/                       $ANFS_WORK_HOME (anfs.conf), default ~/work
+  <job>/                      the job's name is the branch's name
+    core/  stack/  anfs-dev/  worktrees of the clones under sources/, named by alias
+    docs/                     a worktree of a repository a space clones
+    .job.yml                  what the job is: branch, number, created, and each repo's origin,
+                              base commit and main branch
+```
+
+```
+anfs work new <job> [repo...] [--from REF]   worktrees on a new branch <job> (default repo: core)
+anfs work add <job> <repo...>                another repo joins the job, on the same branch
+anfs work list                               JOB BRANCH REPOS STATE NUMBER (keys: job, branch,
+                                             repos[], state, number)
+anfs work show <job>                         each repo: path, branch, ahead of main, dirty; the env
+anfs work path <job> [repo]                  the job's directory, or one repo's worktree
+anfs work cd <job> [repo]                    the same, through the shell function in sh/anfs.sh
+anfs work env <job>                          the isolation variables, as export lines
+anfs work run <job> -- <cmd...>              a command in the job's directory with them set
+anfs work remove [-f] [-y] <job>             worktrees, merged branches, the directory
+```
+
+- A repo is a source's alias (`core`, `stack`, `anfs-dev`, `user`) or the name of a repository an
+  installed space's `space.yml` clones (`docs`, found through `wsm ls --json` and `wsm ls -r
+  --json`). A source that is a local path, or has no git, is refused, and so is a job name that
+  is not a branch name or has a `/` (64). A job that exists is 73.
+- `new` cuts each branch from REF, default the repo's main (a branch of that name that exists
+  already is checked out as it is), and wires the git hooks into a source's worktree when the
+  repo has no `core.hooksPath` of its own. It never pushes and never commits.
+- A job's state is the worst of its repos': `missing` (the worktree is gone), `dirty`, `ahead N`
+  (commits not in main, summed), `clean` (nothing done yet), `merged` (its commits are in main).
+- `remove` refuses a dirty worktree or a branch with commits not in main. `-f` lists what would
+  be lost and asks (`anfs_confirm`; `-y` does not ask). It deletes each branch that is merged
+  into main (with `-f`, the others too), the directory and the job's `TMPDIR`.
+
+### Isolation: what a job's tests may share
+
+Each job gets a number at `new`, the lowest free one from 1, kept in `.job.yml`. `anfs work env`
+and `run` derive from it, and core's test helpers and e2e scripts use these when they are set:
+
+| Variable | Value | Why |
+| --- | --- | --- |
+| `ANFS_WORK_JOB` | the job's name | so a helper can tell it runs inside a job |
+| `ANFS_WORK_NUMBER` | the job's number | names that must differ per job (the harness's containers) |
+| `ROUNDTRIP_SRC_ROOT` | `~/work/<job>` | the round trips test this job's trees |
+| `PMM_SOCK_DIR` | `/tmp/pmm-work-<uid>-<n>` | never the live `/tmp/pmm-<uid>` |
+| `PMM_SSH_PORT_BASE` | `2222 + 100 × n` | two jobs' machines never want the same port |
+| `TMPDIR` | `/tmp/anfs-work-<uid>-<n>` | temp homes are found and cleaned per job |
+
+- The round trips take a source the job does not hold (of `core` and `stack`) from the installed
+  sources, by alias.
+- The ISO store (`~/.cache/anfs/isos`) is shared and read-only to every test: an ISO downloads
+  once. The bats helpers use a temp one; only an e2e reads the real store.
+- tart allows two macOS guests in all, and the live install may be using one: `roundtrip-macos`
+  takes a host-wide lock (`$ANFS_STATE_HOME/work/tart.lock`) and says who holds it.
+- podman is shared: the harness adds `ANFS_WORK_NUMBER` to its containers' names.
+- No test in any of core's suites may name `/tmp/pmm-$(id -u)`, a real `*_HOME` or use a broad
+  `pkill`; a bats test in core's anfs suite (`isolation.bats`) greps for them.
+
+The tests of this package: `bats packages/dev/tests </dev/null`. They run against a core checkout:
+`$ANFS_CORE_DIR`, else the `core` beside this checkout (a job's layout), else the installed one.
 
 ## Three Ways to Test an Install
 
@@ -75,7 +148,7 @@ headless box — are recorded in [anfs-io/docs](https://github.com/anfs-io/docs)
 
 ## Git Hooks
 
-`ppm hooks` points a repo's `core.hooksPath` at the hooks this package stows, which bump a
+`anfs hooks` points a repo's `core.hooksPath` at the hooks this package stows, which bump a
 package's patch version whenever a commit touches it.
 
 This is an install step rather than repo content because **git does not carry hooks through a
@@ -94,5 +167,5 @@ push bumps once, `--amend` does not bump again, and a version you set by hand is
 with nothing pushed yet gets no bumps at all, so a new package sits at `0.1.0` until its first
 push.
 
-Because hooks are wired per repo, `ppm hooks install` has to be re-run after `anfs src add` — this
+Because hooks are wired per repo, `anfs hooks install` has to be re-run after `anfs src add` — this
 package's install hook cannot know about a repo you add later.

@@ -1,0 +1,482 @@
+#!/usr/bin/env bash
+# anfs work — jobs: one piece of work on the toolkit, in its own git worktrees (anfs-dev/dev)
+#
+# Run as `anfs work ...`: anfs runs anfs-<name> from ~/.local/bin for a command it does not
+# declare itself (the package seam). A job is a directory under $ANFS_WORK_HOME (default ~/work)
+# holding a worktree of every repo the work touches, all on one branch named for the job:
+#
+#   ~/work/<job>/
+#     core/  stack/  anfs-dev/   worktrees of the clones under ~/.local/share/anfs/sources/
+#     docs/                      a worktree of a repository an installed space clones
+#     .job.yml                   the job: its branch, its number, its repos and where each came from
+#
+# The checkouts under sources/ are the live install (the tools on PATH are linked from them) and
+# stay on main. A job's number keeps two jobs' tests apart on one host: `anfs work env` and `run`
+# derive a socket directory, an ssh port range and a TMPDIR from it (see _job_env).
+#
+# Never pushes, never commits. `remove` refuses to lose work: a dirty worktree or a branch with
+# commits that are not in main, unless -f (which asks first).
+set -euo pipefail
+
+ANFS_LIB="$HOME/.local/lib/anfs"
+if [[ ! -f "$ANFS_LIB/bash.sh" || ! -f "$ANFS_LIB/cli.sh" || ! -f "$ANFS_LIB/table.sh" ]]; then
+  echo "anfs work: $ANFS_LIB is missing or out of date; install core/anfs again" >&2
+  exit 69
+fi
+# The bash floor, first: re-execs under bash 5 when this is macOS's 3.2
+# shellcheck source=/dev/null
+source "$ANFS_LIB/bash.sh"
+# shellcheck source=/dev/null
+source "$ANFS_LIB/paths.sh"
+# shellcheck source=/dev/null
+source "$ANFS_LIB/log.sh"
+# shellcheck source=/dev/null
+source "$ANFS_LIB/sources.sh"
+# shellcheck source=/dev/null
+source "$ANFS_LIB/cli.sh"
+# shellcheck source=/dev/null
+source "$ANFS_LIB/table.sh"
+anfs_gitsrc_env
+
+CLI_TOOL="anfs work"
+
+: "${ANFS_WORK_HOME:=$HOME/work}"
+[[ "$ANFS_WORK_HOME" != "~/"* ]] || ANFS_WORK_HOME="$HOME/${ANFS_WORK_HOME#\~/}"
+# Where a job's per-number directories go (the sockets, TMPDIR). /tmp, not $TMPDIR: macOS's is
+# too long for a socket's path. Tests point it elsewhere.
+: "${ANFS_WORK_TMP:=/tmp}"
+# What git's hooks are wired to (anfs hooks, this package)
+ANFS_WORK_HOOKS_DIR="$XDG_CONFIG_HOME/git/ppm-hooks"
+
+cli_cmd new "Make a job: a worktree of each repo on a new branch <job>, cut from REF
+(default: each repo's main). A repo is a source's alias, or a repository an
+installed space clones (docs). With no repo: core" \
+  --opt "--from REF: Cut the branches from REF" --arg "job" --arg "[repo...]"
+cli_cmd add "Another repo joins a job: a worktree on the job's branch" --arg "job" --arg "repo..."
+cli_cmd list "Every job: JOB BRANCH REPOS STATE NUMBER. A job's state is the worst of its
+repos': missing, dirty, ahead N, clean, merged" --alias ls
+cli_cmd show "One job: each repo's worktree, branch, commits ahead of main and whether it
+is dirty; its number and its variables" --arg "job"
+cli_cmd path "The job's directory, or one repo's worktree in it" --arg "job" --arg "[repo]"
+cli_cmd cd "Go to the job's directory, or a repo's worktree (the shell function in
+~/.config/sh/anfs.sh)" --arg "job" --arg "[repo]"
+cli_cmd env "The job's isolation variables as export lines: eval \"\$(anfs work env <job>)\"" --arg "job"
+cli_cmd run "Run a command in the job's directory with its variables set; the command's
+exit status is run's: anfs work run <job> -- <cmd...>" --passthrough --arg "job" --arg "cmd..."
+cli_cmd remove "Remove the worktrees, the branches merged into main, and the directory.
+Refuses a dirty worktree or an unmerged branch" --alias rm \
+  --opt "-f --force: Remove anyway, after saying what would be lost" \
+  --opt "-y --yes: Do not ask" --arg "job"
+cli_cmd help "Show this help, or a command's" --arg "[command...]"
+
+cli_help_epilogue() {
+  cat <<'EOF'
+A job is ~/work/<job>/ ($ANFS_WORK_HOME): a git worktree per repo, all on the branch <job>, and
+.job.yml. The checkouts under ~/.local/share/anfs/sources/ stay on main. Each job has a number,
+and its variables (anfs work env) keep its tests apart from other jobs' and from the live
+install: PMM_SOCK_DIR, PMM_SSH_PORT_BASE, TMPDIR, ROUNDTRIP_SRC_ROOT.
+EOF
+}
+
+# What completion asks for: file names only
+complete_job() {
+  local f
+  for f in "$ANFS_WORK_HOME"/*/.job.yml; do
+    [[ -f "$f" ]] && basename "$(dirname "$f")"
+  done
+  return 0
+}
+complete_repo() {
+  local d
+  for d in "$ANFS_SOURCES_HOME"/*/; do
+    [[ -d "$d" ]] && basename "$d"
+  done
+  return 0
+}
+
+_require_yq() { anfs_require yq "brew install yq"; }
+
+# --- a job on disk ------------------------------------------------------------------------------
+
+_job_dir() { printf '%s\n' "$ANFS_WORK_HOME/$1"; }
+_job_file() { printf '%s\n' "$ANFS_WORK_HOME/$1/.job.yml"; }
+
+# A job's name is its branch's: a valid branch name, and one directory (no /)
+_valid_job() {
+  [[ -n "$1" && "$1" != */* && "$1" != -* ]] && git check-ref-format --branch "$1" >/dev/null 2>&1 ||
+    cli_usage_err "'$1' is not a job name: a branch name with no /"
+}
+
+_job_exists() {
+  _valid_job "$1"
+  [[ -f "$(_job_file "$1")" ]] || anfs_die "no job '$1' in $(anfs_display "$ANFS_WORK_HOME") (anfs work list)"
+}
+
+_job_number() { yq -r '.number' "$(_job_file "$1")"; }
+
+# The job's repos, one per line: name<TAB>origin<TAB>base<TAB>main
+_job_repos() {
+  yq -r '.repos[] | [.name, .origin, .base, .main] | @tsv' "$(_job_file "$1")"
+}
+
+# The lowest number no job has, from 1
+_free_number() {
+  local f n=1 taken=" "
+  for f in "$ANFS_WORK_HOME"/*/.job.yml; do
+    [[ -f "$f" ]] || continue
+    taken+="$(yq -r '.number' "$f") "
+  done
+  while [[ "$taken" == *" $n "* ]]; do n=$((n + 1)); done
+  echo "$n"
+}
+
+# --- the repos a job can hold -------------------------------------------------------------------
+
+# The repository <name> is a worktree of, into REPLY: a source's clone, or a clone an installed
+# space made. Refuses a source that is a local path (a link, not a clone) or has no git.
+_repo_origin() {
+  local name="$1" i url dir
+  gitsrc_collect
+  i=$(gitsrc_index "$name")
+  if [[ "$i" != 9999 ]]; then
+    url="${GITSRC_URLS[$i]}"
+    dir="$ANFS_SOURCES_HOME/$name"
+    gitsrc_is_git_url "$url" && [[ ! -L "$dir" ]] ||
+      anfs_die "source '$name' is a local path ($url), not a clone: a job needs a git repository"
+    [[ -e "$dir/.git" ]] || anfs_die "source '$name' has no git repository ($(anfs_display "$dir"))"
+    REPLY="$dir"
+    return 0
+  fi
+  _space_repo "$name" && return 0
+  anfs_die "'$name' is neither a source (anfs src list) nor a repository an installed space clones (wsm ls -r)"
+}
+
+# A repository some installed space's space.yml clones, by the name of its directory, into REPLY.
+# Read from wsm's lists (--json): `ls -r` names each repository by level and path, `ls` says where
+# each level is installed. ANFS_TABLE=json: a reader gets JSON whatever this process was told.
+_space_repo() {
+  local name="$1" wsm levels repos id dir path rel best="" found=() p
+  wsm="$ANFS_BIN_DIR/wsm"
+  [[ -x "$wsm" ]] || return 1
+  _require_yq
+  levels=$(ANFS_TABLE=json "$wsm" list --json 2>/dev/null | yq -p json -r '.[] | select(.dir != null) | [.id, .dir] | @tsv') || return 1
+  repos=$(ANFS_TABLE=json "$wsm" list -r --json 2>/dev/null | yq -p json -r '.[] | .path') || return 1
+  while IFS= read -r path; do
+    [[ -n "$path" && "${path##*/}" == "$name" ]] || continue
+    # The level is the longest installed id the path starts with
+    best="" rel=""
+    while IFS=$'\t' read -r id dir; do
+      id="${id%/}"
+      [[ -n "$id" && "$path" == "$id/"* ]] || continue
+      (( ${#id} > ${#best} )) || continue
+      best="$id" rel="${path#"$id"/}" p="$dir/$rel"
+    done <<< "$levels"
+    [[ -n "$best" && -e "$p/.git" ]] && found+=("$p")
+  done <<< "$repos"
+  case ${#found[@]} in
+    0) return 1 ;;
+    1) REPLY="${found[0]}" ;;
+    *) anfs_fail 2 "'$name' is the name of several repositories spaces clone: ${found[*]}" ;;
+  esac
+}
+
+# The branch a repository's work merges into: main, else master, else what it has checked out
+_main_of() {
+  local b
+  for b in main master; do
+    git -C "$1" show-ref --verify -q "refs/heads/$b" && { echo "$b"; return 0; }
+  done
+  git -C "$1" symbolic-ref --short HEAD 2>/dev/null || echo main
+}
+
+# A worktree of <origin> at <path> on <branch>: the branch as it is when the repo has it, else
+# cut from <from>
+_worktree_add() {
+  local origin="$1" path="$2" branch="$3" from="$4"
+  if git -C "$origin" show-ref --verify -q "refs/heads/$branch"; then
+    git -C "$origin" worktree add -q "$path" "$branch"
+  else
+    git -C "$origin" worktree add -q -b "$branch" "$path" "$from"
+  fi
+}
+
+# Point a source's git hooks at anfs hooks' directory, unless the repo has a hooksPath of its own.
+# A worktree shares its repository's config, so this is what `anfs hooks install` does for it.
+_wire_hooks() {
+  local wt="$1"
+  [[ -d "$ANFS_WORK_HOOKS_DIR" ]] || return 0
+  [[ -z "$(git -C "$wt" config --local --get core.hooksPath 2>/dev/null)" ]] || return 0
+  git -C "$wt" config --local core.hooksPath "$ANFS_WORK_HOOKS_DIR" 2>/dev/null ||
+    anfs_warn "$(basename "$wt"): could not wire the git hooks (read-only?)"
+}
+
+# A source's alias, rather than a space's repository (only sources get the hooks)
+_is_source() {
+  gitsrc_collect
+  [[ "$(gitsrc_index "$1")" != 9999 ]]
+}
+
+# Add <name> (from <origin>) to a job: the worktree, then its entry in .job.yml. Returns 1, having
+# said why, when the worktree could not be made.
+_join() {
+  local job="$1" name="$2" origin="$3" from="$4" dir wt main base
+  dir=$(_job_dir "$job")
+  wt="$dir/$name"
+  main=$(_main_of "$origin")
+  [[ -n "$from" ]] || from="$main"
+  git -C "$origin" rev-parse --verify -q "$from^{commit}" >/dev/null ||
+    { anfs_warn "$name: no commit '$from' to cut the branch from"; return 1; }
+  _worktree_add "$origin" "$wt" "$job" "$from" || { anfs_warn "$name: git worktree add failed"; return 1; }
+  base=$(git -C "$wt" rev-parse HEAD)
+  N="$name" O="$origin" B="$base" M="$main" \
+    yq -i '.repos += [{"name": strenv(N), "origin": strenv(O), "base": strenv(B), "main": strenv(M)}]' "$dir/.job.yml"
+  ! _is_source "$name" || _wire_hooks "$wt"
+}
+
+# --- state --------------------------------------------------------------------------------------
+
+# One repo's state, into REPLY: missing, dirty, ahead N, clean (nothing done yet) or merged (its
+# commits are in main). AHEAD is the count.
+_repo_state() {
+  local wt="$1" base="$2" main="$3" head
+  AHEAD=0
+  if [[ ! -e "$wt/.git" ]]; then REPLY=missing; return 0; fi
+  AHEAD=$(git -C "$wt" rev-list --count "$main..HEAD" 2>/dev/null || echo 0)
+  if [[ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]]; then REPLY=dirty; return 0; fi
+  if (( AHEAD > 0 )); then REPLY="ahead $AHEAD"; return 0; fi
+  head=$(git -C "$wt" rev-parse HEAD)
+  if [[ "$head" == "$base" ]]; then REPLY=clean; else REPLY=merged; fi
+}
+
+# A job's state, the worst of its repos': missing, dirty, ahead (the sum), clean, merged
+_job_state() {
+  local job="$1" dir name origin base main rank=0 r ahead=0
+  dir=$(_job_dir "$job")
+  while IFS=$'\t' read -r name origin base main; do
+    [[ -n "$name" ]] || continue
+    _repo_state "$dir/$name" "$base" "$main"
+    ahead=$((ahead + AHEAD))
+    case "$REPLY" in
+      missing) r=5 ;; dirty) r=4 ;; ahead*) r=3 ;; clean) r=2 ;; *) r=1 ;;
+    esac
+    (( r <= rank )) || rank=$r
+  done < <(_job_repos "$job")
+  case $rank in
+    5) REPLY=missing ;; 4) REPLY=dirty ;; 3) REPLY="ahead $ahead" ;; 2) REPLY=clean ;; 1) REPLY=merged ;;
+    *) REPLY=clean ;;
+  esac
+}
+
+# The job's isolation variables, one NAME<TAB>value per line (CLAUDE.md, "Working on the toolkit")
+_job_env() {
+  local job="$1" n uid
+  n=$(_job_number "$job")
+  uid=$(id -u)
+  printf '%s\t%s\n' \
+    ANFS_WORK_JOB "$job" \
+    ANFS_WORK_NUMBER "$n" \
+    ROUNDTRIP_SRC_ROOT "$(_job_dir "$job")" \
+    PMM_SOCK_DIR "$ANFS_WORK_TMP/pmm-work-$uid-$n" \
+    PMM_SSH_PORT_BASE "$((2222 + 100 * n))" \
+    TMPDIR "$ANFS_WORK_TMP/anfs-work-$uid-$n"
+}
+
+# --- the commands -------------------------------------------------------------------------------
+
+cmd_new() {
+  local job="$1" from="${CLI_OPT[from]:-}" dir name i
+  shift
+  _valid_job "$job"
+  _require_yq
+  dir=$(_job_dir "$job")
+  [[ ! -e "$dir" ]] || anfs_fail 73 "job '$job' exists ($(anfs_display "$dir"))"
+  local -a names=() origins=()
+  [[ $# -gt 0 ]] || set -- core
+  for name in "$@"; do
+    [[ " ${names[*]} " != *" $name "* ]] || continue
+    _repo_origin "$name"
+    names+=("$name") origins+=("$REPLY")
+  done
+
+  mkdir -p "$dir"
+  J="$job" NUM="$(_free_number)" C="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    yq -n '.branch = strenv(J) | .number = (strenv(NUM) | tonumber) | .created = strenv(C) | .repos = []' > "$dir/.job.yml"
+  for i in "${!names[@]}"; do
+    if ! _join "$job" "${names[$i]}" "${origins[$i]}" "$from"; then
+      # Nothing half made: take back the worktrees already added, then the directory
+      _undo_new "$job" "$i" names origins
+      exit 1
+    fi
+  done
+  _new_report "$job" "${names[@]}"
+}
+
+# Undo the first <count> worktrees of a new job that failed part way, and its directory
+_undo_new() {
+  local job="$1" count="$2" i
+  local -n _n="$3" _o="$4"
+  for (( i = 0; i < count; i++ )); do
+    git -C "${_o[$i]}" worktree remove --force "$(_job_dir "$job")/${_n[$i]}" 2>/dev/null || true
+    # -d: only a branch nothing was committed on yet
+    git -C "${_o[$i]}" branch -q -d "$job" >/dev/null 2>&1 || true
+  done
+  rm -rf "$(_job_dir "$job")"
+}
+
+_new_report() {
+  local job="$1" dir
+  shift
+  dir=$(_job_dir "$job")
+  if anfs_json_on; then
+    anfs_result job "$job" dir "$dir" branch "$job" number "$(_job_number "$job")"
+    return 0
+  fi
+  anfs_info "Job $job (number $(_job_number "$job")) in $(anfs_display "$dir"), branch $job:"
+  local name
+  for name in "$@"; do anfs_info "  $name"; done
+}
+
+cmd_add() {
+  local job="$1" name dir
+  shift
+  _job_exists "$job"
+  _require_yq
+  dir=$(_job_dir "$job")
+  local -a added=()
+  for name in "$@"; do
+    if [[ -n "$(N="$name" yq -r '.repos[] | select(.name == strenv(N)) | .name' "$dir/.job.yml")" ]]; then
+      anfs_info "$name is in job $job already"
+      continue
+    fi
+    _repo_origin "$name"
+    _join "$job" "$name" "$REPLY" "" || exit 1
+    added+=("$name")
+  done
+  [[ ${#added[@]} -eq 0 ]] || _new_report "$job" "${added[@]}"
+}
+
+cmd_list() {
+  local f job repos
+  _require_yq
+  {
+    for f in "$ANFS_WORK_HOME"/*/.job.yml; do
+      [[ -f "$f" ]] || continue
+      job=$(basename "$(dirname "$f")")
+      repos=$(yq -r '[.repos[].name] | join(" ")' "$f")
+      _job_state "$job"
+      anfs_row "$job" "$(yq -r '.branch' "$f")" "$repos" "$REPLY" "$(yq -r '.number' "$f")"
+    done
+  } | anfs_table "JOB BRANCH REPOS STATE NUMBER" "job branch repos[] state number"
+}
+
+cmd_show() {
+  local job="$1" dir name origin base main k v branch
+  _job_exists "$job"
+  _require_yq
+  dir=$(_job_dir "$job")
+  _job_state "$job"
+  printf 'job      %s (number %s)\n' "$job" "$(_job_number "$job")"
+  printf 'dir      %s\n' "$(anfs_display "$dir")"
+  printf 'created  %s\n' "$(yq -r '.created' "$dir/.job.yml")"
+  printf 'state    %s\n' "$REPLY"
+  echo "repos:"
+  while IFS=$'\t' read -r name origin base main; do
+    [[ -n "$name" ]] || continue
+    _repo_state "$dir/$name" "$base" "$main"
+    branch=$(git -C "$dir/$name" symbolic-ref --short HEAD 2>/dev/null || echo -)
+    printf '  %-10s %s  branch %s, %s ahead of %s, %s  (from %s)\n' "$name" "$(anfs_display "$dir/$name")" \
+      "$branch" "$AHEAD" "$main" "$([[ "$REPLY" == dirty ]] && echo dirty || echo "$REPLY")" "$(anfs_display "$origin")"
+  done < <(_job_repos "$job")
+  echo "env:"
+  while IFS=$'\t' read -r k v; do printf '  %s=%s\n' "$k" "$v"; done < <(_job_env "$job")
+}
+
+cmd_path() {
+  local job="$1" repo="${2:-}" dir
+  _job_exists "$job"
+  dir=$(_job_dir "$job")
+  if [[ -n "$repo" ]]; then
+    [[ -n "$(N="$repo" yq -r '.repos[] | select(.name == strenv(N)) | .name' "$dir/.job.yml")" ]] ||
+      anfs_die "job $job has no repo '$repo' (anfs work add $job $repo)"
+    dir="$dir/$repo"
+  fi
+  printf '%s\n' "$dir"
+}
+
+cmd_cd() {
+  anfs_die "anfs work cd needs the anfs shell function (source ~/.config/sh/anfs.sh); or: cd \"\$(anfs work path $*)\""
+}
+
+cmd_env() {
+  local k v
+  _job_exists "$1"
+  while IFS=$'\t' read -r k v; do
+    printf 'export %s=%q\n' "$k" "$v"
+  done < <(_job_env "$1")
+}
+
+cmd_run() {
+  local job="$1" k v
+  shift
+  _job_exists "$job"
+  [[ "${1:-}" != -- ]] || shift
+  [[ $# -gt 0 ]] || cli_usage_err "run needs a command: anfs work run $job -- <cmd...>"
+  while IFS=$'\t' read -r k v; do export "$k=$v"; done < <(_job_env "$job")
+  mkdir -p "$TMPDIR"
+  chmod 700 "$TMPDIR"
+  cd "$(_job_dir "$job")"
+  exec "$@"
+}
+
+cmd_remove() {
+  local job="$1" force=${CLI_OPT[force]:-false} dir name origin base main
+  local -a problems=() lost=()
+  _job_exists "$job"
+  _require_yq
+  dir=$(_job_dir "$job")
+  while IFS=$'\t' read -r name origin base main; do
+    [[ -n "$name" ]] || continue
+    _repo_state "$dir/$name" "$base" "$main"
+    case "$REPLY" in
+      dirty) problems+=("$name: uncommitted changes"); lost+=("$(git -C "$dir/$name" status --short | sed "s|^|  $name: |")") ;;
+    esac
+    if (( AHEAD > 0 )); then
+      problems+=("$name: $AHEAD commits not in $main")
+      lost+=("$(git -C "$dir/$name" log --oneline "$main..HEAD" | sed "s|^|  $name: |")")
+    fi
+  done < <(_job_repos "$job")
+
+  if [[ ${#problems[@]} -gt 0 ]]; then
+    local msg
+    msg=$(printf '%s; ' "${problems[@]}")
+    $force || anfs_die "not removing job $job: ${msg%; }; -f removes it anyway"
+    echo "Removing job $job loses:"
+    printf '%s\n' "${lost[@]}"
+    anfs_confirm "removing job $job loses the work above" "Remove job $job?"
+  fi
+
+  while IFS=$'\t' read -r name origin base main; do
+    [[ -n "$name" ]] || continue
+    if [[ -e "$dir/$name" ]]; then
+      if $force; then git -C "$origin" worktree remove --force "$dir/$name"
+      else git -C "$origin" worktree remove "$dir/$name"
+      fi || anfs_die "$name: git worktree remove failed; job $job is left as it is"
+    else
+      git -C "$origin" worktree prune
+    fi
+    if git -C "$origin" show-ref --verify -q "refs/heads/$job"; then
+      if git -C "$origin" merge-base --is-ancestor "$job" "$main"; then
+        git -C "$origin" branch -q -d "$job"
+      elif $force; then
+        git -C "$origin" branch -q -D "$job"
+      fi
+    fi
+  done < <(_job_repos "$job")
+  local tmp
+  tmp=$(_job_env "$job" | awk -F'\t' '$1 == "TMPDIR" { print $2 }')
+  rm -rf "${dir:?}"
+  [[ -z "$tmp" ]] || rm -rf "${tmp:?}"
+  if anfs_json_on; then anfs_result job "$job" removed true; else anfs_info "Removed job $job"; fi
+}
+
+cli_dispatch "$@"

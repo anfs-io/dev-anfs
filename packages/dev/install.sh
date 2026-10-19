@@ -1,27 +1,23 @@
 # dev
 
-# hooks() is stowed to ~/.local/lib/ppm/hooks.sh and normally sourced by ppm at startup — but on
-# the run that first installs this package it did not exist yet, so load it from the package.
-_dev_load_hooks() {
-  declare -f _hooks_apply >/dev/null && return 0
-  local lib="$(dirname "${BASH_SOURCE[0]}")/home/.local/lib/ppm/hooks.sh"
-  [[ -f "$lib" ]] && source "$lib"
+# `anfs hooks` is this package's executable (home/.local/bin/anfs-hooks). Run from the package
+# rather than from ~/.local/bin, so the hooks do not depend on where the install put the link.
+_dev_hooks() {
+  "$(dirname "${BASH_SOURCE[0]}")/home/.local/bin/anfs-hooks" "$@"
 }
 
-# Wire ppm's git hooks into the package repos. Hooks are not carried by git clone, so this runs
-# on install rather than being part of a repo's contents; re-run `ppm hooks install` after
-# `anfs src add`. user.list repos are opt-in (`ppm hooks install --all`).
+# Wire the git hooks into the package repos. Hooks are not carried by git clone, so this runs on
+# install rather than being part of a repo's contents; re-run `anfs hooks install` after
+# `anfs src add`. user.list repos are opt-in (`anfs hooks install --all`).
 post_install() {
-  _dev_load_hooks || return 0
   echo "Wiring git hooks into the system.list repos:"
-  _hooks_apply set false || true
+  _dev_hooks install || true
 }
 
-# Unset core.hooksPath again, but only in repos where ppm set it. The hook files are already
-# unstowed by now; a leftover hooksPath pointing at a missing directory is harmless to git
-# (commits just find no hooks), but leaving it behind would be untidy.
+# Unset core.hooksPath again, but only in repos where it was set to these hooks. The hook files
+# are already unstowed by now; a leftover hooksPath pointing at a missing directory is harmless
+# to git (commits just find no hooks), but leaving it behind would be untidy.
 post_remove() {
-  _dev_load_hooks || return 0
   echo "Removing git hooks from the package repos:"
-  _hooks_apply unset true || true
+  _dev_hooks uninstall --all || true
 }

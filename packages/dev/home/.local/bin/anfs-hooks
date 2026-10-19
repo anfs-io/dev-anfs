@@ -1,28 +1,58 @@
 #!/usr/bin/env bash
-# core/dev — adds `ppm hooks`: wire ppm's git hooks into the package repos
-# Stowed to ~/.local/lib/ppm/ and sourced by ppm: the `ppm hooks` commands are declared below
+# anfs hooks — wire the package-versioning git hooks into the sources' repos (anfs-dev/dev)
+#
+# Run as `anfs hooks ...`: anfs runs anfs-<name> from ~/.local/bin for a command it does not
+# declare itself. It acts on the sources' repos, not on packages, so it is anfs's and not ppm's.
 #
 # Each repo gets core.hooksPath pointed at the stowed hook directory, set per repo. It is never
 # set globally: a global core.hooksPath applies to every repo on the machine AND suppresses each
 # repo's own .git/hooks, which would silently disable husky/lefthook/overcommit everywhere else.
 # Pointing at the stowed path (rather than into the package) means edits to a hook take effect
 # everywhere at once, and a higher-priority layer can override a single hook file through stow.
+set -euo pipefail
 
+ANFS_LIB="$HOME/.local/lib/anfs"
+if [[ ! -f "$ANFS_LIB/bash.sh" || ! -f "$ANFS_LIB/cli.sh" ]]; then
+  echo "anfs hooks: $ANFS_LIB is missing or out of date; install core/anfs again" >&2
+  exit 69
+fi
+# The bash floor, first: re-execs under bash 5 when this is macOS's 3.2
+# shellcheck source=/dev/null
+source "$ANFS_LIB/bash.sh"
+# shellcheck source=/dev/null
+source "$ANFS_LIB/paths.sh"
+# shellcheck source=/dev/null
+source "$ANFS_LIB/log.sh"
+# shellcheck source=/dev/null
+source "$ANFS_LIB/cli.sh"
+
+CLI_TOOL="anfs hooks"
 PPM_HOOKS_DIR="$XDG_CONFIG_HOME/git/ppm-hooks"
 
-cli_group hooks "The package-versioning git hooks, wired into the source repos. Without
-names: the repos in system.list. Hooks are not carried by git clone,
-so install is re-run after 'anfs src add'."
-cli_cmd "hooks status" "Which repos are wired up" \
+cli_cmd status "Which repos are wired up. Without names: the repos in system.list" \
   --opt "--all: Your user.list repos too" --arg "[source...]"
-cli_cmd "hooks install" "Point each repo's core.hooksPath at the hooks" \
+cli_cmd install "Point each repo's core.hooksPath at the hooks" \
   --opt "--all: Your user.list repos too" --arg "[source...]"
-cli_cmd "hooks uninstall" "Unset it again (only where ppm set it)" \
+cli_cmd uninstall "Unset it again (only where anfs hooks set it)" \
   --opt "--all: Your user.list repos too" --arg "[source...]"
+cli_cmd help "Show this help, or a command's" --arg "[command...]"
 
-cmd_hooks_status()    { _hooks_status "${CLI_OPT[all]:-false}" "$@"; }
-cmd_hooks_install()   { _hooks_apply set "${CLI_OPT[all]:-false}" "$@"; }
-cmd_hooks_uninstall() { _hooks_apply unset "${CLI_OPT[all]:-false}" "$@"; }
+cli_help_epilogue() {
+  cat <<'EOF'
+The hooks bump a package's patch version when a commit touches it. Hooks are not carried by git
+clone, so install is re-run after 'anfs src add'.
+EOF
+}
+
+complete_source() {
+  local d
+  for d in "$ANFS_SOURCES_HOME"/*/; do [[ -d "$d" ]] && basename "$d"; done
+  return 0
+}
+
+cmd_status()    { _hooks_status "${CLI_OPT[all]:-false}" "$@"; }
+cmd_install()   { _hooks_apply set "${CLI_OPT[all]:-false}" "$@"; }
+cmd_uninstall() { _hooks_apply unset "${CLI_OPT[all]:-false}" "$@"; }
 
 # Repo aliases listed in one source-list file (the format collect_repos reads)
 _hooks_aliases_in() {
@@ -60,7 +90,7 @@ _hooks_apply() {
   local alias dir current changed=0
 
   if [[ "$action" == set && ! -d "$PPM_HOOKS_DIR" ]]; then
-    anfs_warn "$PPM_HOOKS_DIR does not exist (is core/dev installed?)"
+    anfs_warn "$PPM_HOOKS_DIR does not exist (is anfs-dev/dev installed?)"
     return 1
   fi
 
@@ -68,14 +98,14 @@ _hooks_apply() {
     [[ -n "$alias" ]] || continue
     dir="$ANFS_SOURCES_HOME/$alias"
     if [[ ! -d "$dir/.git" ]]; then
-      debug "hooks: $alias is not a git repo, skipping"
+      anfs_debug "$alias is not a git repo, skipping"
       continue
     fi
     current=$(_hooks_current "$dir")
 
     if [[ "$action" == set ]]; then
       if [[ "$current" == "$PPM_HOOKS_DIR" ]]; then
-        debug "hooks: $alias already wired up"
+        anfs_debug "$alias already wired up"
         continue
       fi
       if [[ -n "$current" ]]; then
@@ -84,14 +114,14 @@ _hooks_apply() {
       fi
       _hooks_warn_shadowed "$alias" "$dir"
       # Never fatal: a repo can be read-only (containers mount the host's repos that way) and a
-      # failure to wire a hook must not abort `ppm install dev` or skip its tracker
+      # failure to wire a hook must not abort `ppm install anfs-dev/dev` or skip its tracker
       if ! git -C "$dir" config --local core.hooksPath "$PPM_HOOKS_DIR" 2>/dev/null; then
         echo "  $alias: could not write .git/config (read-only?), skipped"
         continue
       fi
       echo "  $alias: hooks installed"
     else
-      # Only ever remove what ppm set, never a hooksPath the user chose
+      # Only ever remove what this set, never a hooksPath the user chose
       [[ "$current" == "$PPM_HOOKS_DIR" ]] || continue
       if ! git -C "$dir" config --local --unset core.hooksPath 2>/dev/null; then
         echo "  $alias: could not write .git/config (read-only?), skipped"
@@ -106,8 +136,6 @@ _hooks_apply() {
 }
 
 # core.hooksPath replaces .git/hooks wholesale, so say so if the repo has real hooks there.
-# Printed rather than queued with user_message: `ppm hooks` is its own command and never reaches
-# the end-of-install flush, so a queued message would be swallowed.
 _hooks_warn_shadowed() {
   local alias="$1" dir="$2" found
   found=$(find "$dir/.git/hooks" -maxdepth 1 -type f ! -name '*.sample' 2>/dev/null | wc -l | tr -d ' ')
@@ -137,3 +165,5 @@ _hooks_status() {
     printf '  %-12s %s\n' "$alias" "$state"
   done < <(_hooks_target_repos "$all" "$@")
 }
+
+cli_dispatch "$@"
