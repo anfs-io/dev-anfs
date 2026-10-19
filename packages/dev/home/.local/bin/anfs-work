@@ -313,7 +313,7 @@ _job_state() {
   esac
 }
 
-# The job's isolation variables, one NAME<TAB>value per line (CLAUDE.md, "Working on the toolkit")
+# The job's isolation variables, one NAME<TAB>value per line (AGENTS.md, "Working on the toolkit")
 _job_env() {
   local job="$1" n uid
   n=$(_job_number "$job")
