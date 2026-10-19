@@ -241,3 +241,22 @@ docs_space() {
   run work __complete new j ""
   [[ "$output" == *core* && "$output" == *stack* ]]
 }
+
+@test "through anfs: anfs work is anfs-work, its help is listed, and the shell function's cd" {
+  ln -s "$CORE/packages/anfs/home/.local/bin/anfs" "$HOME/.local/bin/anfs"
+  ln -s "$WORK" "$HOME/.local/bin/anfs-work"
+  local anfs="$HOME/.local/bin/anfs"
+  run "$anfs" work new one core
+  [ "$status" -eq 0 ]
+  run "$anfs" work path one core
+  [ "$output" = "$ANFS_WORK_HOME/one/core" ]
+  run "$anfs" help
+  [[ "$output" == *$'From packages:\n  work'* ]]
+  run "$anfs" work bogus
+  [ "$status" -eq 64 ]
+  [[ "$output" == *"anfs work: unknown command 'bogus'"* ]]
+  # anfs work cd, through core's sh/anfs.sh
+  run bash -c 'PATH="$HOME/.local/bin:$PATH"; . "$1"; anfs work cd one core && pwd' _ "$CORE/packages/anfs/home/.config/sh/anfs.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$ANFS_WORK_HOME/one/core" ]
+}
