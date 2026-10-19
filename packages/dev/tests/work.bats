@@ -142,6 +142,12 @@ docs_space() {
   [ "$output" = "$ANFS_WORK_HOME/one one 2322 $ANFS_WORK_TMP/anfs-work-$(id -u)-1" ]
   run work run one
   [ "$status" -eq 64 ]
+  # with a repo: in its worktree
+  run work run one core -- pwd
+  [ "$status" -eq 0 ]
+  [ "$output" = "$ANFS_WORK_HOME/one/core" ]
+  run work run one docs -- pwd
+  [ "$status" -eq 1 ]
 }
 
 @test "path and show" {
@@ -226,6 +232,72 @@ docs_space() {
   ! git -C "$CORE_SRC" show-ref --verify -q refs/heads/u
   run git -C "$CORE_SRC" worktree list
   [ "${#lines[@]}" -eq 1 ]
+}
+
+@test "remove: the job's branch counts when its worktree is gone or on another branch" {
+  # the worktree deleted by hand, a commit left on the branch
+  work new a core >/dev/null
+  commit "$ANFS_WORK_HOME/a/core" wip-a
+  rm -rf "$ANFS_WORK_HOME/a/core"
+  run work list
+  [[ "$output" == *"a"$'\t'"a"$'\t'"core"$'\t'"missing"* ]]
+  run work remove a
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"core: 1 commits not in main"* ]]
+  run work remove -f a </dev/null
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"change wip-a"* && "$output" == *"pass -y"* ]]
+  git -C "$CORE_SRC" show-ref --verify -q refs/heads/a
+  run work remove -f -y a
+  [ "$status" -eq 0 ]
+  ! git -C "$CORE_SRC" show-ref --verify -q refs/heads/a
+
+  # the worktree switched to another branch: the job's branch still holds the commit
+  work new b core >/dev/null
+  commit "$ANFS_WORK_HOME/b/core" wip-b
+  git -C "$ANFS_WORK_HOME/b/core" switch -q -c other main
+  run work remove b
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"core: 1 commits not in main"* ]]
+  [ -d "$ANFS_WORK_HOME/b/core" ]
+}
+
+@test "remove: refuses files in the job's directory that are in no worktree; -f lists them" {
+  work new c core >/dev/null
+  echo notes > "$ANFS_WORK_HOME/c/NOTES.md"
+  run work remove c
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"in no worktree"* ]]
+  [ -f "$ANFS_WORK_HOME/c/NOTES.md" ]
+  run work remove -f -y c
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"NOTES.md"* ]]
+  [ ! -e "$ANFS_WORK_HOME/c" ]
+}
+
+@test "remove takes the job's TMPDIR and PMM_SOCK_DIR with it" {
+  work new one core >/dev/null
+  work run one -- bash -c 'mkdir -p "$PMM_SOCK_DIR/bats"'
+  [ -d "$ANFS_WORK_TMP/anfs-work-$(id -u)-1" ] && [ -d "$ANFS_WORK_TMP/pmm-work-$(id -u)-1/bats" ]
+  work remove one >/dev/null
+  [ ! -e "$ANFS_WORK_TMP/anfs-work-$(id -u)-1" ] && [ ! -e "$ANFS_WORK_TMP/pmm-work-$(id -u)-1" ]
+}
+
+@test "a job may not be named main or master (64)" {
+  run work new main core
+  [ "$status" -eq 64 ]
+  run work new master core
+  [ "$status" -eq 64 ]
+  [ "$(git -C "$CORE_SRC" worktree list | wc -l | tr -d ' ')" = 1 ]
+}
+
+@test "new: jobs made at the same moment get different numbers" {
+  local j
+  for j in p1 p2 p3 p4; do work new "$j" core >/dev/null & done
+  wait
+  run bash -c 'for f in "$1"/*/.job.yml; do yq -r .number "$f"; done | sort -n | tr "\n" " "' _ "$ANFS_WORK_HOME"
+  [ "$output" = "1 2 3 4 " ]
+  [ ! -e "$ANFS_WORK_HOME/.numbers.lock" ]
 }
 
 @test "the git hooks are wired into a source's worktree when anfs hooks' directory exists" {

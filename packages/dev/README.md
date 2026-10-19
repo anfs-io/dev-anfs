@@ -40,22 +40,29 @@ anfs work show <job>                         each repo: path, branch, ahead of m
 anfs work path <job> [repo]                  the job's directory, or one repo's worktree
 anfs work cd <job> [repo]                    the same, through the shell function in sh/anfs.sh
 anfs work env <job>                          the isolation variables, as export lines
-anfs work run <job> -- <cmd...>              a command in the job's directory with them set
+anfs work run <job> [repo] -- <cmd...>       a command with them set, in the job's directory or
+                                             a repo's worktree (run a core -- bats packages/...)
 anfs work remove [-f] [-y] <job>             worktrees, merged branches, the directory
 ```
 
 - A repo is a source's alias (`core`, `stack`, `anfs-dev`, `user`) or the name of a repository an
   installed space's `space.yml` clones (`docs`, found through `wsm ls --json` and `wsm ls -r
   --json`). A source that is a local path, or has no git, is refused, and so is a job name that
-  is not a branch name or has a `/` (64). A job that exists is 73.
+  is not a branch name, has a `/` or is `main` or `master` (64). A job that exists is 73.
 - `new` cuts each branch from REF, default the repo's main (a branch of that name that exists
   already is checked out as it is), and wires the git hooks into a source's worktree when the
   repo has no `core.hooksPath` of its own. It never pushes and never commits.
 - A job's state is the worst of its repos': `missing` (the worktree is gone), `dirty`, `ahead N`
   (commits not in main, summed), `clean` (nothing done yet), `merged` (its commits are in main).
-- `remove` refuses a dirty worktree or a branch with commits not in main. `-f` lists what would
-  be lost and asks (`anfs_confirm`; `-y` does not ask). It deletes each branch that is merged
-  into main (with `-f`, the others too), the directory and the job's `TMPDIR`.
+  Commits are counted on the branch `<job>` in the origin as well as at the worktree's HEAD, so a
+  worktree that is gone or was switched to another branch does not hide them.
+- `remove` refuses a dirty worktree, a branch with commits not in main, and files in the job's
+  directory that are in no worktree (notes, logs). `-f` lists what would be lost and asks
+  (`anfs_confirm`; `-y` does not ask). It deletes each branch that is merged into main (with
+  `-f`, the others too), the directory and the job's `TMPDIR` and `PMM_SOCK_DIR`, so the next job
+  of that number starts empty.
+- The number is chosen under a lock (`$ANFS_WORK_HOME/.numbers.lock`), so jobs made at the same
+  moment get different ones.
 
 ### Isolation: what a job's tests may share
 
