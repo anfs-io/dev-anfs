@@ -54,7 +54,7 @@ complete_distro() {
 }
 
 _container_distros() {
-  pcm list --json 2>/dev/null | yq -p json -r '.[].name' 2>/dev/null | sed -n 's/^anfs-test-//p' | sort -u | paste -sd ' ' -
+  pcm list --json 2>/dev/null | yq -p json -r '.[].container | sub("^[^/]*/"; "")' 2>/dev/null | sed -n 's/^anfs-test-//p' | sort -u | paste -sd ' ' -
 }
 
 _container_distro() {

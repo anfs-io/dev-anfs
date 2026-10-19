@@ -59,7 +59,7 @@ cmd_vm_ip() {
   _vm_pmm
   _vm_target "$1" || return 1
   local ip
-  ip=$(N="anfs-test-$1" pmm list --json | N="anfs-test-$1" yq -p json -r '.[] | select(.name == strenv(N) and .state == "running") | .address')
+  ip=$(N="anfs-test-$1" pmm list --json | N="anfs-test-$1" yq -p json -r '.[] | select((.machine | sub("^[^/]*/"; "")) == strenv(N) and .status == "running") | .address')
   [[ -n "$ip" ]] || { echo "anfs-test-$1 is not running (ppm vm up $1)" >&2; return 1; }
   echo "$ip"
 }
@@ -75,7 +75,7 @@ complete_target() {
 }
 
 _vm_targets() {
-  pmm list --json 2>/dev/null | yq -p json -r '.[].name' 2>/dev/null | sed -n 's/^anfs-test-//p' | sort -u | paste -sd ' ' -
+  pmm list --json 2>/dev/null | yq -p json -r '.[].machine | sub("^[^/]*/"; "")' 2>/dev/null | sed -n 's/^anfs-test-//p' | sort -u | paste -sd ' ' -
 }
 
 _vm_target() {

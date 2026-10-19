@@ -188,7 +188,7 @@ docs_space() {
   run env -u ANFS_TABLE "$WORK" --json list
   [ "$status" -eq 0 ]
   [ "$(printf '%s' "$output" | yq -p json -r '.[] | select(.job == "a") | .repos | join(",")')" = "core,stack" ]
-  [ "$(printf '%s' "$output" | yq -p json -r '.[0] | keys | sort | join(" ")')" = "branch job number repos state" ]
+  [ "$(printf '%s' "$output" | yq -p json -r '.[0] | keys | sort | join(" ")')" = "branch job number repos status" ]
 }
 
 @test "remove: refuses dirty and unmerged; removes a merged job's worktrees, branches and directory" {

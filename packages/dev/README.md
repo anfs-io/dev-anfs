@@ -34,8 +34,8 @@ job:
 ```
 anfs work new <job> [repo...] [--from REF]   worktrees on a new branch <job> (default repo: core)
 anfs work add <job> <repo...>                another repo joins the job, on the same branch
-anfs work list                               JOB BRANCH REPOS STATE NUMBER (keys: job, branch,
-                                             repos[], state, number)
+anfs work list                               JOB BRANCH REPOS STATUS NUMBER (keys: job, branch,
+                                             repos[], status, number)
 anfs work show <job>                         each repo: path, branch, ahead of main, dirty; the env
 anfs work path <job> [repo]                  the job's directory, or one repo's worktree
 anfs work cd <job> [repo]                    the same, through the shell function in sh/anfs.sh
@@ -46,7 +46,7 @@ anfs work remove [-f] [-y] <job>             worktrees, merged branches, the dir
 ```
 
 - A repo is a source's alias (`core`, `stack`, `anfs-dev`, `user`) or the name of a repository an
-  installed space's `space.yml` clones (`docs`, found through `wsm ls --json` and `wsm ls -r
+  installed space's `space.yml` clones (`docs`, found through `wsm ls --json` and `wsm repo ls
   --json`). A source that is a local path, or has no git, is refused, and so is a job name that
   is not a branch name, has a `/` or is `main` or `master` (64). A job that exists is 73.
 - `new` cuts each branch from REF, default the repo's main (a branch of that name that exists

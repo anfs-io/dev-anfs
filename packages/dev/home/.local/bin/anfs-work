@@ -53,7 +53,7 @@ cli_cmd new "Make a job: a worktree of each repo on a new branch <job>, cut from
 installed space clones (docs). With no repo: core" \
   --opt "--from REF: Cut the branches from REF" --arg "job" --arg "[repo...]"
 cli_cmd add "Another repo joins a job: a worktree on the job's branch" --arg "job" --arg "repo..."
-cli_cmd list "Every job: JOB BRANCH REPOS STATE NUMBER. A job's state is the worst of its
+cli_cmd list "Every job: JOB BRANCH REPOS STATUS NUMBER. A job's status is the worst of its
 repos': missing, dirty, ahead N, clean, merged" --alias ls
 cli_cmd show "One job: each repo's worktree, branch, commits ahead of main and whether it
 is dirty; its number and its variables" --arg "job"
@@ -185,19 +185,19 @@ _repo_origin() {
     return 0
   fi
   _space_repo "$name" && return 0
-  anfs_die "'$name' is neither a source (anfs src list) nor a repository an installed space clones (wsm ls -r)"
+  anfs_die "'$name' is neither a source (anfs src list) nor a repository an installed space clones (wsm repo ls)"
 }
 
 # A repository some installed space's space.yml clones, by the name of its directory, into REPLY.
-# Read from wsm's lists (--json): `ls -r` names each repository by level and path, `ls` says where
+# Read from wsm's lists (--json): `repo ls` names each repository by level and path, `ls` says where
 # each level is installed. ANFS_TABLE=json: a reader gets JSON whatever this process was told.
 _space_repo() {
   local name="$1" wsm levels repos id dir path rel best="" found=() p
   wsm="$ANFS_BIN_DIR/wsm"
   [[ -x "$wsm" ]] || return 1
   _require_yq
-  levels=$(ANFS_TABLE=json "$wsm" list --json 2>/dev/null | yq -p json -r '.[] | select(.dir != null) | [.id, .dir] | @tsv') || return 1
-  repos=$(ANFS_TABLE=json "$wsm" list -r --json 2>/dev/null | yq -p json -r '.[] | .path') || return 1
+  levels=$(ANFS_TABLE=json "$wsm" list --json 2>/dev/null | yq -p json -r '.[] | select(.dir != null) | [.space, .dir] | @tsv') || return 1
+  repos=$(ANFS_TABLE=json "$wsm" repo list --json 2>/dev/null | yq -p json -r '.[] | .repository') || return 1
   while IFS= read -r path; do
     [[ -n "$path" && "${path##*/}" == "$name" ]] || continue
     # The level is the longest installed id the path starts with
@@ -416,7 +416,7 @@ cmd_list() {
       _job_state "$job"
       anfs_row "$job" "$(yq -r '.branch' "$f")" "$repos" "$REPLY" "$(yq -r '.number' "$f")"
     done
-  } | anfs_table "JOB BRANCH REPOS STATE NUMBER" "job branch repos[] state number"
+  } | anfs_table "JOB BRANCH REPOS STATUS NUMBER" "job branch repos[] status number"
 }
 
 cmd_show() {
