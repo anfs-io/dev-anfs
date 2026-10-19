@@ -122,7 +122,7 @@ check "ppm: acme/acme-mac installed its cask"         'ppm list --installed --js
 check "cli: help and completion from the declarations" 'anfs help | grep -q "implode \[-y\]" && ppm __complete "" | grep -q "^implode" && ppm completion zsh | grep -q "ppm __complete"'
 check "pmm: the image acme/hello validates with its from: parent" 'pmm image validate acme/hello debian-13'
 check "pmm: the machine acme/hello validates against its image" 'pmm validate acme/hello'
-check "psm: acme-hello installed for pi"              'psm skills ls --json | yq -p json -e ".[] | select(.status == \"ok\" and .config == \"acme\" and .skill == \"acme-hello\")"'
+check "psm: acme-hello installed for pi"              'psm ls --json | yq -p json -e ".[] | select(.status == \"ok\" and .skill == \"acme/acme-hello\")"'
 check "wsm: org installed before tech"                'wsm path acme/main/org >/dev/null && wsm path acme/main/tech >/dev/null'
 if grep -q "pcm install" <<< "$acme_out" && box 'pcm list' >/dev/null 2>&1; then
   echo "  ok    pcm: runs, and its containers are reported failing (no nested virtualization)"
