@@ -28,9 +28,12 @@ cli_cmd "vm down" "Shut it down" --alias stop --arg "target"
 cli_cmd "vm shell" "Login shell as a test user (owner or other)" --arg "target" --arg "[user]"
 cli_cmd "vm install" "Run install.sh from the mounted sources: [owner|other] [--pushed] [installer args]
 (--pushed: from GitHub)" --passthrough --arg "target" --arg "[word...]"
-cli_cmd "vm snapshot" "Save the box (no name lists its snapshots)" --arg "target" --arg "[snapshot]"
-cli_cmd "vm reset" "Recreate it from a snapshot, or from its image's current build" --arg "target" --arg "[snapshot]"
-cli_cmd "vm remove" "Remove it and its snapshots (the image's build stays: pmm image remove)" --alias rm --arg "target"
+cli_cmd "vm snapshot" "Save the box (no name lists its snapshots)" \
+  --opt "-y --yes: Do not ask before replacing a snapshot of that name" --arg "target" --arg "[snapshot]"
+cli_cmd "vm reset" "Recreate it from a snapshot, or from its image's current build" \
+  --opt "-y --yes: Do not ask before replacing its disk" --arg "target" --arg "[snapshot]"
+cli_cmd "vm remove" "Remove it and its snapshots (the image's build stays: pmm image remove)" --alias rm \
+  --opt "-y --yes: Do not ask before deleting" --arg "target"
 cli_cmd "vm ip" "The box's address" --arg "target"
 
 _vm_pmm() {
@@ -50,10 +53,12 @@ cmd_vm_install()  { _vm_pmm; _vm_install "$@"; }
 cmd_vm_snapshot() {
   _vm_pmm
   _vm_target "$1" || return 1
-  if [[ -n "${2:-}" ]]; then pmm snapshot create "anfs-test-$1" "$2"; else pmm snapshot list "anfs-test-$1"; fi
+  if [[ -n "${2:-}" ]]; then pmm snapshot create $(_vm_yes) "anfs-test-$1" "$2"; else pmm snapshot list "anfs-test-$1"; fi
 }
-cmd_vm_reset()    { _vm_pmm; _vm_target "$1" && pmm reset -y "anfs-test-$1" ${2:+"$2"}; }
-cmd_vm_remove()   { _vm_pmm; _vm_target "$1" && pmm remove -y "anfs-test-$1"; }
+# pmm asks what it asks; a -y given here is passed on
+_vm_yes() { ! ${CLI_OPT[yes]:-false} || echo -y; }
+cmd_vm_reset()    { _vm_pmm; _vm_target "$1" && pmm reset $(_vm_yes) "anfs-test-$1" ${2:+"$2"}; }
+cmd_vm_remove()   { _vm_pmm; _vm_target "$1" && pmm remove $(_vm_yes) "anfs-test-$1"; }
 # A tool reads another's list with --json: the address is pmm list's, null while the box is down
 cmd_vm_ip() {
   _vm_pmm

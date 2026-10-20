@@ -26,9 +26,12 @@ cli_cmd "container down" "Stop it" --alias stop --arg "distro"
 cli_cmd "container shell" "Login shell as a test user (owner or other)" --arg "distro" --arg "[user]"
 cli_cmd "container install" "Run install.sh from the working tree: [owner|other] [--pushed] [installer args]
 (--pushed: from GitHub)" --passthrough --arg "distro" --arg "[word...]"
-cli_cmd "container snapshot" "Save the box (no name lists its snapshots)" --arg "distro" --arg "[snapshot]"
-cli_cmd "container reset" "Recreate it from a snapshot, or from scratch" --arg "distro" --arg "[snapshot]"
-cli_cmd "container remove" "Remove it and its snapshots" --alias rm --arg "distro"
+cli_cmd "container snapshot" "Save the box (no name lists its snapshots)" \
+  --opt "-y --yes: Do not ask before replacing a snapshot of that name" --arg "distro" --arg "[snapshot]"
+cli_cmd "container reset" "Recreate it from a snapshot, or from scratch" \
+  --opt "-y --yes: Do not ask before replacing its data" --arg "distro" --arg "[snapshot]"
+cli_cmd "container remove" "Remove it and its snapshots" --alias rm \
+  --opt "-y --yes: Do not ask before deleting" --arg "distro"
 
 _container_pcm() {
   command -v pcm >/dev/null 2>&1 || { echo "ppm container needs pcm (ppm install core/anfs)" >&2; exit 1; }
@@ -39,9 +42,11 @@ cmd_container_up()       { _container_pcm; _container_distro "$1" && pcm up "anf
 cmd_container_down()     { _container_pcm; _container_distro "$1" && pcm down "anfs-test-$1"; }
 cmd_container_shell()    { _container_pcm; _container_distro "$1" && _container_user "${2:-owner}" && pcm shell "anfs-test-$1" -u "${2:-owner}"; }
 cmd_container_install()  { _container_pcm; _container_install "$@"; }
-cmd_container_snapshot() { _container_pcm; _container_distro "$1" && pcm snapshot "anfs-test-$1" ${2:+"$2"}; }
-cmd_container_reset()    { _container_pcm; _container_distro "$1" && pcm reset -y "anfs-test-$1" ${2:+"$2"}; }
-cmd_container_remove()   { _container_pcm; _container_distro "$1" && pcm remove -y "anfs-test-$1"; }
+# pcm asks what it asks; a -y given here is passed on
+_container_yes() { ! ${CLI_OPT[yes]:-false} || echo -y; }
+cmd_container_snapshot() { _container_pcm; _container_distro "$1" && pcm snapshot $(_container_yes) "anfs-test-$1" ${2:+"$2"}; }
+cmd_container_reset()    { _container_pcm; _container_distro "$1" && pcm reset $(_container_yes) "anfs-test-$1" ${2:+"$2"}; }
+cmd_container_remove()   { _container_pcm; _container_distro "$1" && pcm remove $(_container_yes) "anfs-test-$1"; }
 
 # What cli.sh asks for on a tab press: the boxes, from the definitions' names
 complete_distro() {

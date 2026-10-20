@@ -25,7 +25,7 @@ docs_space() {
   printf 'repositories:\n  - url: %s\n' "$url" > "$dev/spaces/space.yml"
   git -C "$dev" add -A && git -C "$dev" commit -q -m spaces
   ln -s "$CORE/packages/wsm/home/.local/bin/wsm" "$HOME/.local/bin/wsm"
-  "$HOME/.local/bin/wsm" install anfs-dev/ "$T/spaces" >/dev/null
+  "$HOME/.local/bin/wsm" install -y anfs-dev/ "$T/spaces" >/dev/null
   [ -d "$T/spaces/anfs-dev/docs/.git" ]
 }
 
@@ -222,7 +222,7 @@ docs_space() {
   commit "$ANFS_WORK_HOME/u/core" lost-file
   # no terminal and no -y: it asks for -y, nothing done
   run work remove -f u </dev/null
-  [ "$status" -eq 1 ]
+  [ "$status" -eq 77 ]
   [[ "$output" == *"change lost-file"* ]]
   [[ "$output" == *"pass -y"* ]]
   [ -d "$ANFS_WORK_HOME/u/core" ]
@@ -245,7 +245,7 @@ docs_space() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"core: 1 commits not in main"* ]]
   run work remove -f a </dev/null
-  [ "$status" -eq 1 ]
+  [ "$status" -eq 77 ]
   [[ "$output" == *"change wip-a"* && "$output" == *"pass -y"* ]]
   git -C "$CORE_SRC" show-ref --verify -q refs/heads/a
   run work remove -f -y a

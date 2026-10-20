@@ -68,7 +68,7 @@ cli_cmd remove "Remove the worktrees, the branches merged into main, and the dir
 Refuses a dirty worktree, a branch with commits not in main, or files in the job's
 directory that are in no worktree" --alias rm \
   --opt "-f --force: Remove anyway, after saying what would be lost" \
-  --opt "-y --yes: Do not ask" --arg "job"
+  --opt "-y --yes: With -f, do not ask before losing the work" --arg "job"
 cli_cmd help "Show this help, or a command's" --arg "[command...]"
 
 cli_help_epilogue() {
