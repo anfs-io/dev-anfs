@@ -15,7 +15,7 @@
 #   --scratch  start from the bare distro image instead of the bootstrap snapshot, so install.sh
 #              installs Homebrew itself; with --all, Homebrew must be gone at the end
 #
-# The box starts from a `bootstrap` snapshot: Homebrew, stow, yq and mise already brewed (the
+# The box starts from a `bootstrap` snapshot: Homebrew, yq and mise already brewed (the
 # software install.sh owns and implode keeps), passwordless sudo for `owner`, and nothing of
 # anfs's. It is built on first use. The source repos are copied from $ROUNDTRIP_SRC_ROOT (one directory
 # per alias: `anfs work run <job>` sets it to the job's directory; by default the directory this
@@ -65,7 +65,7 @@ build_bootstrap() {
   $H exec "$distro" -- bash -c '
     NONINTERACTIVE=1 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" >/dev/null
     eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-    brew install -q stow yq mise >/dev/null'
+    brew install -q yq mise >/dev/null'
   $H snapshot "$distro" bootstrap
 }
 

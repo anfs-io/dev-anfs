@@ -152,7 +152,7 @@ podman machine cannot start (the check is that pcm reports it and implode leaves
   from a bare image so install.sh installs Homebrew itself (and `--all` must remove it).
 - `packages/dev/tests/fixtures/acme` is a stand-in org source with every resource kind: a package depending on
   another source's, a container, a skill, and spaces that depend on each other.
-- The round trip starts from a `bootstrap` snapshot (Homebrew, stow, yq, mise; passwordless sudo),
+- The round trip starts from a `bootstrap` snapshot (Homebrew, yq, mise; passwordless sudo),
   built on first use, and tests a copy of the checkouts in `ROUNDTRIP_SRC_ROOT`: a job's directory
   under `anfs work run`, by default the directory the running anfs-dev checkout is in. Of core,
   stack and anfs-dev, one the root does not hold is the installed source (`roundtrip-sources`).

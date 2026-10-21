@@ -17,7 +17,6 @@ job_key() { yq -r ".$2" "$ANFS_WORK_HOME/$1/.job.yml"; }
 
 # A source anfs-dev whose space.yml clones a repository docs, installed with wsm
 docs_space() {
-  command -v stow >/dev/null || skip "no stow"
   local dev url
   dev=$(mksource anfs-dev)
   url=$(mkbare docs)
