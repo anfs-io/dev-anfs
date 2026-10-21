@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The anfs round trip, on a fresh Linux box:
 #
-#   install.sh                       the toolkit: the stack core/system (no pmm, qemu or pvm)
+#   install.sh                       the toolkit: the stack core/system (no pmm or qemu)
 #   ppm install stack/pi             an agent, so psm has somewhere to put skills
 #   anfs src install acme            the fixture org source (anfs-dev: packages/dev/tests/fixtures/acme): its packages,
 #                                    containers, skills and spaces, tool by tool
@@ -142,7 +142,7 @@ check() {
 
 echo "== checks (the default install)"
 check "system: anfs list shows core/system installed"  'anfs list | grep -Eq "^core/system[[:space:]]+installed"'
-check "system: no pmm, qemu or pvm by default"          '! command -v pmm && ! command -v pvm && ! compgen -c qemu-system- | grep -q . && ! ppm list --installed --json | yq -p json -e ".[] | select(.package == \"core/pmm\" or .package == \"core/qemu\" or .package == \"core/pvm\")"'
+check "system: no pmm, qemu or ovm by default"          '! command -v pmm && ! command -v ovm && ! compgen -c qemu-system- | grep -q . && ! ppm list --installed --json | yq -p json -e ".[] | select(.package == \"core/pmm\" or .package == \"core/qemu\" or .package == \"stack/obsidian\")"'
 
 if [[ " ${installs[*]} " == *" acme "* ]]; then
   echo "== checks"
