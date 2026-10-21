@@ -189,27 +189,19 @@ _repo_origin() {
 }
 
 # A repository some installed space's space.yml clones, by the name of its directory, into REPLY.
-# Read from wsm's lists (--json): `repo ls` names each repository by level and path, `ls` says where
-# each level is installed. ANFS_TABLE=json: a reader gets JSON whatever this process was told.
+# Read from `wsm repo list --json` (never by column): each row has the clone's path, `dir`, null
+# while its space is not installed. ANFS_TABLE=json: a reader gets JSON whatever this process was
+# told.
 _space_repo() {
-  local name="$1" wsm levels repos id dir path rel best="" found=() p
+  local name="$1" wsm path dir
+  local -a found=()
   wsm="$ANFS_BIN_DIR/wsm"
   [[ -x "$wsm" ]] || return 1
   _require_yq
-  levels=$(ANFS_TABLE=json "$wsm" list --json 2>/dev/null | yq -p json -r '.[] | select(.dir != null) | [.space, .dir] | @tsv') || return 1
-  repos=$(ANFS_TABLE=json "$wsm" repo list --json 2>/dev/null | yq -p json -r '.[] | .repository') || return 1
-  while IFS= read -r path; do
-    [[ -n "$path" && "${path##*/}" == "$name" ]] || continue
-    # The level is the longest installed id the path starts with
-    best="" rel=""
-    while IFS=$'\t' read -r id dir; do
-      id="${id%/}"
-      [[ -n "$id" && "$path" == "$id/"* ]] || continue
-      (( ${#id} > ${#best} )) || continue
-      best="$id" rel="${path#"$id"/}" p="$dir/$rel"
-    done <<< "$levels"
-    [[ -n "$best" && -e "$p/.git" ]] && found+=("$p")
-  done <<< "$repos"
+  while IFS=$'\t' read -r path dir; do
+    [[ -n "$path" && "${path##*/}" == "$name" && -n "$dir" && -e "$dir/.git" ]] && found+=("$dir")
+  done < <(ANFS_TABLE=json "$wsm" repo list --json 2>/dev/null |
+    yq -p json -r '.[] | select(.dir != null) | [.path, .dir] | @tsv' 2>/dev/null || true)
   case ${#found[@]} in
     0) return 1 ;;
     1) REPLY="${found[0]}" ;;

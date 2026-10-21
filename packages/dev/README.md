@@ -46,8 +46,8 @@ anfs work remove [-f] [-y] <job>             worktrees, merged branches, the dir
 ```
 
 - A repo is a source's alias (`core`, `stack`, `anfs-dev`, `user`) or the name of a repository an
-  installed space's `space.yml` clones (`docs`, found through `wsm ls --json` and `wsm repo ls
-  --json`). A source that is a local path, or has no git, is refused, and so is a job name that
+  installed space's `space.yml` clones (`docs`, found through `wsm repo ls --json`: its `path`
+  ends in the name and its `dir` is a clone). A source that is a local path, or has no git, is refused, and so is a job name that
   is not a branch name, has a `/` or is `main` or `master` (64). A job that exists is 73.
 - `new` cuts each branch from REF, default the repo's main (a branch of that name that exists
   already is checked out as it is), and wires the git hooks into a source's worktree when the

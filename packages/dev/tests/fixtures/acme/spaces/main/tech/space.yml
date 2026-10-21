@@ -1,2 +1,3 @@
-# Engineering's space; installing it installs org first
-depends: [org]
+# Engineering's space; installing it installs main/org first (a path in this source: no
+# sibling by name)
+depends: [main/org]

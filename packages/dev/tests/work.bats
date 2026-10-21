@@ -15,7 +15,8 @@ setup() {
 # The job's yml, one key
 job_key() { yq -r ".$2" "$ANFS_WORK_HOME/$1/.job.yml"; }
 
-# A source anfs-dev whose space.yml clones a repository docs, installed with wsm
+# A source anfs-dev whose root space.yml clones a repository docs, installed with wsm into
+# WSM_SPACES_HOME (the one root wsm has)
 docs_space() {
   local dev url
   dev=$(mksource anfs-dev)
@@ -24,7 +25,8 @@ docs_space() {
   printf 'repositories:\n  - url: %s\n' "$url" > "$dev/spaces/space.yml"
   git -C "$dev" add -A && git -C "$dev" commit -q -m spaces
   ln -s "$CORE/packages/wsm/home/.local/bin/wsm" "$HOME/.local/bin/wsm"
-  "$HOME/.local/bin/wsm" install -y anfs-dev/ "$T/spaces" >/dev/null
+  export WSM_SPACES_HOME="$T/spaces"
+  "$HOME/.local/bin/wsm" install -y anfs-dev >/dev/null
   [ -d "$T/spaces/anfs-dev/docs/.git" ]
 }
 
@@ -70,6 +72,23 @@ docs_space() {
   [ "$status" -eq 0 ]
   [ "$(git -C "$ANFS_WORK_HOME/d/docs" symbolic-ref --short HEAD)" = d ]
   [ "$(git -C "$ANFS_WORK_HOME/d/docs" rev-parse --git-common-dir)" = "$T/spaces/anfs-dev/docs/.git" ]
+}
+
+@test "a repository of a nested space is found through wsm repo list's dir" {
+  local dev url
+  dev=$(mksource lgat)
+  url=$(mkbare web)
+  mkdir -p "$dev/spaces/tech/site"
+  printf 'repositories:\n  - url: %s\n    path: repos/web\n' "$url" > "$dev/spaces/tech/site/space.yml"
+  git -C "$dev" add -A && git -C "$dev" commit -q -m spaces
+  ln -s "$CORE/packages/wsm/home/.local/bin/wsm" "$HOME/.local/bin/wsm"
+  export WSM_SPACES_HOME="$T/spaces"
+  run work new w core web
+  [ "$status" -eq 1 ]
+  "$HOME/.local/bin/wsm" install lgat/tech/site >/dev/null
+  run work new w core web
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$ANFS_WORK_HOME/w/web" rev-parse --git-common-dir)" = "$T/spaces/lgat/tech/site/repos/web/.git" ]
 }
 
 @test "add: another repo joins a job on its branch; one already in it is left alone" {

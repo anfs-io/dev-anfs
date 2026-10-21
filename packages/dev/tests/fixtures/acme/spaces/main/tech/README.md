@@ -1,3 +1,3 @@
 # acme tech
 
-Linked into ~/spaces/main/tech by wsm, beside space.yml.
+Linked into ~/spaces/acme/main/tech by wsm, beside space.yml.

@@ -13,6 +13,6 @@ A stand-in for a real org repo (lgat): one source holding every resource kind, s
 | `machines/hello` | pmm | a machine from that image |
 | `machines/networks/lab` | pmm | an isolated network; validated, installed nowhere |
 | `skills/acme-hello` | psm | one skill |
-| `spaces/org`, `spaces/tech` | wsm | `tech` depends on `org` |
+| `spaces/main/org`, `spaces/main/tech` | wsm | two spaces (`main/` is a directory); `acme/main/tech` depends on `main/org` |
 
 Nothing here needs credentials: the space repo is a public https URL.
