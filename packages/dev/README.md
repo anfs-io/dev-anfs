@@ -23,7 +23,7 @@ directory holding a git worktree of every repo the work touches, all on one bran
 job:
 
 ```
-~/work/                       $ANFS_WORK_HOME (anfs.conf), default ~/work
+~/work/                       $ANFS_WORK_HOME (the environment only, never a settings file), default ~/work
   <job>/                      the job's name is the branch's name
     core/  stack/  anfs-dev/  worktrees of the clones under sources/, named by alias
     docs/                     a worktree of a repository a space clones
