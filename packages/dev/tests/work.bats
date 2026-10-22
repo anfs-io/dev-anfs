@@ -137,6 +137,8 @@ docs_space() {
   work new two core >/dev/null
   run work env one
   [ "$status" -eq 0 ]
+  # the switch first: a job's tests never run through it
+  [ "${lines[0]}" = "unset ANFS_WORK ANFS_WORK_SAID" ]
   local uid; uid=$(id -u)
   [[ "$output" == *"export ANFS_WORK_JOB=one"* ]]
   [[ "$output" == *"export ROUNDTRIP_SRC_ROOT=$ANFS_WORK_HOME/one"* ]]
@@ -168,6 +170,16 @@ docs_space() {
   [ "$status" -eq 1 ]
 }
 
+@test "run: ANFS_WORK exported in the shell does not reach the command" {
+  work new one core >/dev/null
+  ANFS_WORK=one ANFS_WORK_SAID=one run work run one -- bash -c 'echo "${ANFS_WORK-unset} ${ANFS_WORK_SAID-unset} $ANFS_WORK_JOB"'
+  [ "$status" -eq 0 ]
+  [ "$output" = "unset unset one" ]
+  # and env's lines, eval'd, take it away
+  ANFS_WORK=one run bash -c 'eval "$("$1" env one)"; echo "${ANFS_WORK-unset}"' _ "$WORK"
+  [ "$output" = unset ]
+}
+
 @test "path and show" {
   work new one core stack >/dev/null
   run work path one
@@ -182,6 +194,7 @@ docs_space() {
   [[ "$output" == *"number 1"* ]]
   [[ "$output" == *"core"*"branch one, 1 ahead of main"* ]]
   [[ "$output" == *"PMM_SSH_PORT_BASE=2322"* ]]
+  [ "${lines[-1]}" = "run its tools on live data: ANFS_WORK=one <tool> ..." ]
   run work cd one
   [ "$status" -eq 1 ]
   [[ "$output" == *"shell function"* ]]

@@ -17,25 +17,30 @@
 # Never pushes, never commits. `remove` refuses to lose work: a dirty worktree or a branch with
 # commits that are not in main, unless -f (which asks first).
 set -euo pipefail
+# A job's copy of this tool runs instead when ANFS_WORK names one (lib/anfs/work.sh)
+[ -z "${ANFS_WORK:-}" ] || [ ! -f "$HOME/.local/lib/anfs/work.sh" ] || . "$HOME/.local/lib/anfs/work.sh"
 
-ANFS_LIB="$HOME/.local/lib/anfs"
-if [[ ! -f "$ANFS_LIB/bash.sh" || ! -f "$ANFS_LIB/cli.sh" || ! -f "$ANFS_LIB/table.sh" ]]; then
-  echo "anfs work: $ANFS_LIB is missing or out of date; install core/anfs again" >&2
+if [[ ! -f "$HOME/.local/lib/anfs/paths.sh" ]]; then
+  echo "anfs work: ~/.local/lib/anfs is missing or out of date; install core/anfs again" >&2
   exit 69
 fi
 # The bash floor, first: re-execs under bash 5 when this is macOS's 3.2
 # shellcheck source=/dev/null
-source "$ANFS_LIB/bash.sh"
+source "$HOME/.local/lib/anfs/bash.sh"
 # shellcheck source=/dev/null
-source "$ANFS_LIB/paths.sh"
+source "$HOME/.local/lib/anfs/paths.sh"
+if [[ ! -f "$ANFS_LIB_DIR/cli.sh" || ! -f "$ANFS_LIB_DIR/table.sh" ]]; then
+  echo "anfs work: $ANFS_LIB_DIR is out of date; install core/anfs again" >&2
+  exit 69
+fi
 # shellcheck source=/dev/null
-source "$ANFS_LIB/log.sh"
+source "$ANFS_LIB_DIR/log.sh"
 # shellcheck source=/dev/null
-source "$ANFS_LIB/sources.sh"
+source "$ANFS_LIB_DIR/sources.sh"
 # shellcheck source=/dev/null
-source "$ANFS_LIB/cli.sh"
+source "$ANFS_LIB_DIR/cli.sh"
 # shellcheck source=/dev/null
-source "$ANFS_LIB/table.sh"
+source "$ANFS_LIB_DIR/table.sh"
 anfs_gitsrc_env
 
 CLI_TOOL="anfs work"
@@ -60,7 +65,8 @@ is dirty; its number and its variables" --arg "job"
 cli_cmd path "The job's directory, or one repo's worktree in it" --arg "job" --arg "[repo]"
 cli_cmd cd "Go to the job's directory, or a repo's worktree (the shell function in
 ~/.config/sh/anfs.sh)" --arg "job" --arg "[repo]"
-cli_cmd env "The job's isolation variables as export lines: eval \"\$(anfs work env <job>)\"" --arg "job"
+cli_cmd env "The job's isolation variables as export lines, after unset ANFS_WORK:
+eval \"\$(anfs work env <job>)\"" --arg "job"
 cli_cmd run "Run a command with the job's variables set, in the job's directory or in one
 repo's worktree; the command's exit status is run's:
 anfs work run <job> [repo] -- <cmd...>" --passthrough --arg "job" --arg "cmd..."
@@ -77,6 +83,9 @@ A job is ~/work/<job>/ ($ANFS_WORK_HOME): a git worktree per repo, all on the br
 .job.yml. The checkouts under ~/.local/share/anfs/sources/ stay on main. Each job has a number,
 and its variables (anfs work env) keep its tests apart from other jobs' and from the live
 install: PMM_SOCK_DIR, PMM_SSH_PORT_BASE, TMPDIR, ROUNDTRIP_SRC_ROOT.
+
+ANFS_WORK=<job> <tool> ... runs the job's copy of an installed tool, with the job's libraries,
+on live data (lib/anfs/work.sh); env and run unset it, so a job's tests never see it.
 EOF
 }
 
@@ -431,6 +440,7 @@ cmd_show() {
   done < <(_job_repos "$job")
   echo "env:"
   while IFS=$'\t' read -r k v; do printf '  %s=%s\n' "$k" "$v"; done < <(_job_env "$job")
+  echo "run its tools on live data: ANFS_WORK=$job <tool> ..."
 }
 
 cmd_path() {
@@ -452,6 +462,8 @@ cmd_cd() {
 cmd_env() {
   local k v
   _job_exists "$1"
+  # A job's tests run its code by path, never through the switch (lib/anfs/work.sh)
+  echo "unset ANFS_WORK ANFS_WORK_SAID"
   while IFS=$'\t' read -r k v; do
     printf 'export %s=%q\n' "$k" "$v"
   done < <(_job_env "$1")
@@ -470,6 +482,8 @@ cmd_run() {
   [[ "${1:-}" != -- ]] || shift
   [[ $# -gt 0 ]] || cli_usage_err "run needs a command: anfs work run $job [repo] -- <cmd...>"
   while IFS=$'\t' read -r k v; do export "$k=$v"; done < <(_job_env "$job")
+  # A job's tests run its code by path, never through the switch (lib/anfs/work.sh)
+  unset ANFS_WORK ANFS_WORK_SAID
   mkdir -p "$TMPDIR"
   chmod 700 "$TMPDIR"
   cd "$dir"

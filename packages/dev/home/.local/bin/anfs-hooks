@@ -10,22 +10,27 @@
 # Pointing at the stowed path (rather than into the package) means edits to a hook take effect
 # everywhere at once, and a higher-priority layer can override a single hook file through stow.
 set -euo pipefail
+# A job's copy of this tool runs instead when ANFS_WORK names one (lib/anfs/work.sh)
+[ -z "${ANFS_WORK:-}" ] || [ ! -f "$HOME/.local/lib/anfs/work.sh" ] || . "$HOME/.local/lib/anfs/work.sh"
 
 HOOKS_SELF="${BASH_SOURCE[0]}"
-ANFS_LIB="$HOME/.local/lib/anfs"
-if [[ ! -f "$ANFS_LIB/bash.sh" || ! -f "$ANFS_LIB/cli.sh" ]]; then
-  echo "anfs hooks: $ANFS_LIB is missing or out of date; install core/anfs again" >&2
+if [[ ! -f "$HOME/.local/lib/anfs/paths.sh" ]]; then
+  echo "anfs hooks: ~/.local/lib/anfs is missing or out of date; install core/anfs again" >&2
   exit 69
 fi
 # The bash floor, first: re-execs under bash 5 when this is macOS's 3.2
 # shellcheck source=/dev/null
-source "$ANFS_LIB/bash.sh"
+source "$HOME/.local/lib/anfs/bash.sh"
 # shellcheck source=/dev/null
-source "$ANFS_LIB/paths.sh"
+source "$HOME/.local/lib/anfs/paths.sh"
+if [[ ! -f "$ANFS_LIB_DIR/cli.sh" ]]; then
+  echo "anfs hooks: $ANFS_LIB_DIR is out of date; install core/anfs again" >&2
+  exit 69
+fi
 # shellcheck source=/dev/null
-source "$ANFS_LIB/log.sh"
+source "$ANFS_LIB_DIR/log.sh"
 # shellcheck source=/dev/null
-source "$ANFS_LIB/cli.sh"
+source "$ANFS_LIB_DIR/cli.sh"
 
 CLI_TOOL="anfs hooks"
 PPM_HOOKS_DIR="$XDG_CONFIG_HOME/git/ppm-hooks"

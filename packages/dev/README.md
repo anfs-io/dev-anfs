@@ -88,6 +88,18 @@ and `run` derive from it, and core's test helpers and e2e scripts use these when
 - No test in any of core's suites may name `/tmp/pmm-$(id -u)`, a real `*_HOME` or use a broad
   `pkill`; a bats test in core's anfs suite (`isolation.bats`) greps for them.
 
+### Trying a job's code on live data: `ANFS_WORK`
+
+`ANFS_WORK=<job> <tool> ...` runs the job's copy of an installed tool (`pcm`, `ppm`, `anfs work`,
+stack's tools, ...), with the job's libraries, against this machine's real sources, settings and
+data: `ANFS_WORK=config-03 pcm list`. It says `anfs: running job <job>` once on stderr. A tool the
+job has no copy of runs as installed (with the job's `lib/anfs` when the job has core); a job that
+does not exist is exit 64. It is read from the environment only, never a settings file. Anything
+the command changes is changed for real, so it is for trying a branch by hand, not for tests:
+`anfs work run` unsets it and `anfs work env` starts with `unset ANFS_WORK ANFS_WORK_SAID`, and
+every test helper unsets it too. The rules are core's (`lib/anfs/work.sh`; core AGENTS.md, "Running
+a job's code: ANFS_WORK").
+
 The tests of this package: `bats packages/dev/tests </dev/null`. They run against a core checkout:
 `$ANFS_CORE_DIR`, else the `core` beside this checkout (a job's layout), else the installed one.
 
