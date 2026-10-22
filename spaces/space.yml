@@ -1,3 +1,8 @@
 ---
 repositories:
   - url: git@github.com:anfs-io/docs
+links: [{src: ~/.local/share/anfs/sources}]
+skills:
+  - repo: mattpocock/skills
+    skills:
+      - grill-with-docs

@@ -1,0 +1,4 @@
+---
+repositories:
+  - url: git@github.com:anfs-io/marketplace
+  - url: git@github.com:anfs-io/ans
