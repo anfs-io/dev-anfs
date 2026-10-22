@@ -7,7 +7,7 @@ about the tooling around it. It is a `user.list` source (`anfs src add`).
 ## Layout
 
 - `packages/dev/` — `anfs work` (jobs in git worktrees), `anfs hooks` and the git hooks,
-  `ppm container`, `ppm vm`, `ppm user`, `ppm move` (`packages/dev/README.md`). Its `tests/` hold
+  `ppm container`, `ppm vm`, `ppm user` (`packages/dev/README.md`). Its `tests/` hold
   the bats suites (`bats packages/dev/tests </dev/null`), and the end-to-end round trips: the
   `harness`, `roundtrip`, `roundtrip-macos`, `roundtrip-sources` and the `fixtures/acme` org.
 - `containers/anfs-test-debian`, `containers/anfs-test-fedora` — the Linux test boxes, pcm services
@@ -83,43 +83,6 @@ A version that isn't `N.N.N` is left alone rather than mangled.
 `lib/package-meta.sh` next to the hook is deliberately standalone — it uses `sed` rather than
 `yq` so a hook never depends on ppm's environment, and it stays out of `~/.local/lib/ppm/`
 because its `meta_*` names would share a namespace with `packages.sh`'s.
-
-## Moving a Package Between Repos
-
-`anfs-dev/dev` ships `ppm move`, which relocates a package from one source repo to another. The files
-live in the package at `packages/dev/home/.local/lib/ppm/move.sh`, stowed to
-`~/.local/lib/ppm/move.sh` — a function named `move` there becomes `ppm move`, like `ppm user`
-(the old seam; a new command is an `anfs-<name>`, see "The Command Line").
-
-```
-ppm move <repo/package> <target-repo>      # e.g. ppm move stack/rails user
-  -f, --force   move despite uncommitted changes or a broken dependency
-```
-
-It unstows the package, moves the directory, stows it again from its new home, moves the install
-tracker (`installed/<repo>/<pkg>.yml`, keeping its version, files and `installed_deps`), repoints
-any `claims.yml` entry that names the package as claimant or owner, and commits both repos. The
-source spec must be fully qualified: a bare name matches a layer in every repo.
-
-- **Install hooks are not re-run.** The package's content is unchanged, only its path, so
-  `pre_remove`/`post_install` would tear down services and rewrite generated config for nothing.
-- **Restowing is not a plain `stow_package`.** `stow -D` only removed the links that point into
-  *this* package dir, so re-stowing the whole directory would collide with the files a
-  higher-priority layer owns. The tracker lists what this layer actually had, so `move` stows with
-  the *complement* as the ignore list — which also leaves `ppm file protect`ed files alone. stow
-  aborts the whole operation on the first conflict, so a failed stow rolls the move back; if the
-  same conflict then fails the restore, it says to run `ppm install -f <pkg>`.
-- **It refuses a move that would break a dependent**, unless `-f`. `_resolve_one` passes the
-  depending layer's repo index as `min_index`, so a dependency only ever resolves to the same or a
-  lower-priority repo — moving a package *up* in priority orphans anything below it that depends
-  on it. `depends:` names a package, not a repo, so no dependent needs editing otherwise; there is
-  deliberately no rename.
-- **It refuses a repo with uncommitted changes**, unless `-f`. The commits are pathspec-limited to
-  `packages/<pkg>`, so even under `-f` unrelated changes stay out of them, and the index is
-  re-added afterwards because a partial commit leaves the pre-hook content staged for whatever the
-  `pre-commit` hook rewrote (the version bump).
-- **An existing package of that name in the target is refused outright**, `-f` included: `-f` must
-  never overwrite package sources.
 
 ## The Round Trips and the Test Boxes
 

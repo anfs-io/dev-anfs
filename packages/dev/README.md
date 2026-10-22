@@ -11,8 +11,8 @@ ppm install anfs-dev/dev
 
 `anfs work` and `anfs hooks` are executables (`~/.local/bin/anfs-work`, `anfs-hooks`) that anfs
 runs for a command it does not declare itself (core's "commands from packages": `anfs help` lists
-them under "From packages", and `anfs work cd` is core's `sh/anfs.sh` function). `ppm container`, `ppm vm`, `ppm user` and `ppm
-move` are still ppm commands, stowed into `~/.local/lib/ppm/`. Run any of them for its usage.
+them under "From packages", and `anfs work cd` is core's `sh/anfs.sh` function). `ppm container`, `ppm vm` and `ppm user`
+are still ppm commands, stowed into `~/.local/lib/ppm/`. Run any of them for its usage.
 What follows is what each one is for and when to reach for it.
 
 ## Working on the toolkit
