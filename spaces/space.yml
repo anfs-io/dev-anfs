@@ -8,3 +8,21 @@ skills:
   - repo: mattpocock/skills
     skills:
       - grill-with-docs
+
+# Dispatch (anfsd, agents/02b; core AGENTS.md "Dispatch"): a bug report filed into this space
+# starts the maintainer in a job of its own, with nobody watching. It replaces the session that
+# greps BACKLOG.md. Both rules are committed `enabled: false`: turning them on is the person's
+# decision (delete `enabled: false,` from both, commit, anfs src update anfs-dev, anfs bus
+# reload). `anfs agents match --type report.filed --space anfs-dev --subject r-1 --data to=file
+# --data package=core/pcm` shows what a report would start, starting nothing.
+access:
+  - {path: ~/.local/share/anfs/sources, mode: read}
+agents:
+  maintainer: {harness: claude, concurrency: 1, budget_usd: 10}
+dispatch:
+  - {name: fix-core-report, enabled: false, on: {type: report.filed, data: {to: file, package: "core/*"}},
+     as: maintainer, job: {name: "fix-{{subject}}", repos: [core]},
+     prompt_file: prompts/report-filed.md, timeout: 2h}
+  - {name: fix-stack-report, enabled: false, on: {type: report.filed, data: {to: file, package: "stack/*"}},
+     as: maintainer, job: {name: "fix-{{subject}}", repos: [stack]},
+     prompt_file: prompts/report-filed.md, timeout: 2h}
