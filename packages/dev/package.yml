@@ -1,2 +1,5 @@
-version: 0.1.15
+version: 0.1.16
 author: rjayroach
+depends:
+  # builds anfsd (anfs-io/runtime's go/); stack/go
+  - go
