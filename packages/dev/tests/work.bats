@@ -138,7 +138,7 @@ docs_space() {
   run work env one
   [ "$status" -eq 0 ]
   # the switch first: a job's tests never run through it
-  [ "${lines[0]}" = "unset ANFS_WORK ANFS_WORK_SAID" ]
+  [ "${lines[0]}" = "unset ANFS_WORK ANFS_WORK_SAID ANFS_EVENTS_SPOOL" ]
   local uid; uid=$(id -u)
   [[ "$output" == *"export ANFS_WORK_JOB=one"* ]]
   [[ "$output" == *"export ROUNDTRIP_SRC_ROOT=$ANFS_WORK_HOME/one"* ]]
@@ -177,6 +177,15 @@ docs_space() {
   [ "$output" = "unset unset one" ]
   # and env's lines, eval'd, take it away
   ANFS_WORK=one run bash -c 'eval "$("$1" env one)"; echo "${ANFS_WORK-unset}"' _ "$WORK"
+  [ "$output" = unset ]
+}
+
+@test "run and env: a dispatched run's ANFS_EVENTS_SPOOL does not reach the command" {
+  work new one core >/dev/null
+  ANFS_EVENTS_SPOOL="$BATS_TEST_TMPDIR/spool" run work run one -- bash -c 'echo "${ANFS_EVENTS_SPOOL-unset}"'
+  [ "$status" -eq 0 ]
+  [ "$output" = unset ]
+  ANFS_EVENTS_SPOOL="$BATS_TEST_TMPDIR/spool" run bash -c 'eval "$("$1" env one)"; echo "${ANFS_EVENTS_SPOOL-unset}"' _ "$WORK"
   [ "$output" = unset ]
 }
 

@@ -96,8 +96,10 @@ data: `ANFS_WORK=config-03 pcm list`. It says `anfs: running job <job>` once on 
 job has no copy of runs as installed (with the job's `lib/anfs` when the job has core); a job that
 does not exist is exit 64. It is read from the environment only, never a settings file. Anything
 the command changes is changed for real, so it is for trying a branch by hand, not for tests:
-`anfs work run` unsets it and `anfs work env` starts with `unset ANFS_WORK ANFS_WORK_SAID`, and
-every test helper unsets it too. The rules are core's (`lib/anfs/work.sh`; core AGENTS.md, "Running
+`anfs work run` unsets it and `anfs work env` starts with `unset ANFS_WORK ANFS_WORK_SAID
+ANFS_EVENTS_SPOOL`, and every test helper unsets it too. `ANFS_EVENTS_SPOOL` (a run anfsd
+dispatched: its own spool) goes with it, so the tests a run starts never emit into the run's spool
+as the run. The rules are core's (`lib/anfs/work.sh`; core AGENTS.md, "Running
 a job's code: ANFS_WORK").
 
 The tests of this package: `bats packages/dev/tests </dev/null`. They run against a core checkout:

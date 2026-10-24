@@ -65,7 +65,8 @@ is dirty; its number and its variables" --arg "job"
 cli_cmd path "The job's directory, or one repo's worktree in it" --arg "job" --arg "[repo]"
 cli_cmd cd "Go to the job's directory, or a repo's worktree (the shell function in
 ~/.config/sh/anfs.sh)" --arg "job" --arg "[repo]"
-cli_cmd env "The job's isolation variables as export lines, after unset ANFS_WORK:
+cli_cmd env "The job's isolation variables as export lines, after unset ANFS_WORK
+ANFS_WORK_SAID ANFS_EVENTS_SPOOL:
 eval \"\$(anfs work env <job>)\"" --arg "job"
 cli_cmd run "Run a command with the job's variables set, in the job's directory or in one
 repo's worktree; the command's exit status is run's:
@@ -85,7 +86,9 @@ and its variables (anfs work env) keep its tests apart from other jobs' and from
 install: PMM_SOCK_DIR, PMM_SSH_PORT_BASE, TMPDIR, ROUNDTRIP_SRC_ROOT.
 
 ANFS_WORK=<job> <tool> ... runs the job's copy of an installed tool, with the job's libraries,
-on live data (lib/anfs/work.sh); env and run unset it, so a job's tests never see it.
+on live data (lib/anfs/work.sh); env and run unset it, so a job's tests never see it. They
+unset ANFS_EVENTS_SPOOL too: in a run anfsd dispatched, the tests' own events go to the log (or
+nowhere: the test helpers set ANFS_EVENTS=off), never into the run's spool as the run's.
 EOF
 }
 
@@ -462,8 +465,9 @@ cmd_cd() {
 cmd_env() {
   local k v
   _job_exists "$1"
-  # A job's tests run its code by path, never through the switch (lib/anfs/work.sh)
-  echo "unset ANFS_WORK ANFS_WORK_SAID"
+  # A job's tests run its code by path, never through the switch (lib/anfs/work.sh), and never
+  # emit into a dispatched run's spool (anfsd reads only the export lines)
+  echo "unset ANFS_WORK ANFS_WORK_SAID ANFS_EVENTS_SPOOL"
   while IFS=$'\t' read -r k v; do
     printf 'export %s=%q\n' "$k" "$v"
   done < <(_job_env "$1")
@@ -482,8 +486,9 @@ cmd_run() {
   [[ "${1:-}" != -- ]] || shift
   [[ $# -gt 0 ]] || cli_usage_err "run needs a command: anfs work run $job [repo] -- <cmd...>"
   while IFS=$'\t' read -r k v; do export "$k=$v"; done < <(_job_env "$job")
-  # A job's tests run its code by path, never through the switch (lib/anfs/work.sh)
-  unset ANFS_WORK ANFS_WORK_SAID
+  # A job's tests run its code by path, never through the switch (lib/anfs/work.sh), and never
+  # emit into a dispatched run's spool (lib/anfs/events.sh)
+  unset ANFS_WORK ANFS_WORK_SAID ANFS_EVENTS_SPOOL
   mkdir -p "$TMPDIR"
   chmod 700 "$TMPDIR"
   cd "$dir"
