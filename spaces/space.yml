@@ -21,9 +21,9 @@ access:
 agents:
   maintainer: {harness: claude, concurrency: 1, budget_usd: 10}
 dispatch:
-  - {name: fix-core-report, enabled: false, on: {type: report.filed, data: {to: file, package: "core/*"}},
+  - {name: fix-core-report, on: {type: report.filed, data: {to: file, package: "core/*"}},
      as: maintainer, job: {name: "fix-{{subject}}", repos: [core]},
      prompt_file: prompts/report-filed.md, timeout: 2h}
-  - {name: fix-stack-report, enabled: false, on: {type: report.filed, data: {to: file, package: "stack/*"}},
+  - {name: fix-stack-report, on: {type: report.filed, data: {to: file, package: "stack/*"}},
      as: maintainer, job: {name: "fix-{{subject}}", repos: [stack]},
      prompt_file: prompts/report-filed.md, timeout: 2h}
