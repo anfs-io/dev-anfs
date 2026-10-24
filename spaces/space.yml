@@ -3,6 +3,7 @@ id: tkj76y3nfx
 repositories:
   - url: git@github.com:anfs-io/docs
   - url: git@github.com:anfs-io/runtime
+  - url: git@github.com:anfs-io/events
 links: [{src: ~/.local/share/anfs/sources}]
 skills:
   - repo: mattpocock/skills
